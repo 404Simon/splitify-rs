@@ -1,0 +1,15 @@
+{
+  "name": "rustify-app",
+  "version": "1.0.0",
+  "description": "A modern expense splitting and group financial management web application built with Rust, Leptos, and Axum. This project is a port of the Laravel \"Splitify\" application to a full-stack Rust architecture.",
+  "main": "tailwind.config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "tailwindcss": "^4.1.18"
+  }
+}
