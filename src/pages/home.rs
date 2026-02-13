@@ -1,11 +1,20 @@
 use crate::features::auth::UserSession;
 use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 
 /// Home page component
 #[component]
 pub fn HomePage() -> impl IntoView {
     let user_resource =
         expect_context::<LocalResource<Result<Option<UserSession>, ServerFnError>>>();
+    let navigate = use_navigate();
+
+    // Redirect logged-in users to /groups
+    Effect::new(move |_| {
+        if let Some(Ok(Some(_))) = user_resource.get() {
+            navigate("/groups", Default::default());
+        }
+    });
 
     view! {
         <div class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-indigo-950">
@@ -34,13 +43,13 @@ pub fn HomePage() -> impl IntoView {
 
                                     <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
                                         <a
-                                            href="/dashboard"
+                                            href="/groups"
                                             class="inline-flex items-center px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5"
                                         >
                                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                             </svg>
-                                            "Go to Dashboard"
+                                            "Go to Groups"
                                         </a>
                                     </div>
                                 </div>

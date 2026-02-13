@@ -16,6 +16,7 @@ pub struct User {
 
 /// UserSession model for session storage
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ssr", derive(FromRow))]
 pub struct UserSession {
     pub id: i64,
     pub username: String,

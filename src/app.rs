@@ -1,10 +1,13 @@
 use crate::features::auth::get_user;
-use crate::pages::{Dashboard, HomePage, LoginPage, RegisterPage};
+use crate::pages::{
+    GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
+    LoginPage, RegisterPage,
+};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
-    StaticSegment,
+    path, StaticSegment,
 };
 
 /// Shell function for SSR HTML template
@@ -73,7 +76,12 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("login") view=LoginPage/>
                     <Route path=StaticSegment("register") view=RegisterPage/>
-                    <Route path=StaticSegment("dashboard") view=Dashboard/>
+                    <Route path=StaticSegment("groups") view=GroupsIndex/>
+                    <Route path=path!("/groups/create") view=GroupsCreate/>
+                    <Route path=path!("/groups/:id") view=GroupsShow/>
+                    <Route path=path!("/groups/:id/edit") view=GroupsEdit/>
+                    <Route path=path!("/groups/:id/invites") view=GroupsInvites/>
+                    <Route path=path!("/invite/:uuid") view=InviteAccept/>
                 </Routes>
             </main>
         </Router>

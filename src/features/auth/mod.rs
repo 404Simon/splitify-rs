@@ -7,3 +7,4 @@ pub use handlers::{
     get_user, login_user, logout_user, register_user, GetUser, LoginUser, LogoutUser, RegisterUser,
 };
 pub use models::{User, UserSession};
+pub use utils::use_logout;

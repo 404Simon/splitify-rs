@@ -6,6 +6,8 @@ pub mod pages;
 
 pub mod features {
     pub mod auth;
+    pub mod groups;
+    pub mod invites;
 }
 
 #[cfg(feature = "ssr")]

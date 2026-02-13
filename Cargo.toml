@@ -24,7 +24,7 @@ bcrypt = { version = "0.16", optional = true }
 tower-sessions = { version = "0.14", optional = true }
 tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite"], optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
-time = { version = "0.3", optional = true }
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 
 # Financial calculations
 rust_decimal = { version = "1.39", features = ["serde"] }
@@ -32,6 +32,15 @@ rust_decimal = { version = "1.39", features = ["serde"] }
 # Serialization
 serde = { version = "1", features = ["derive"] }
 thiserror = { version = "2", optional = true }
+
+# URL encoding
+urlencoding = "2.1"
+
+# UUID generation
+uuid = { version = "1", features = ["v4", "serde"], optional = true }
+
+# Date/time handling
+chrono = { version = "0.4", features = ["serde"], optional = true }
 
 [features]
 hydrate = [
@@ -49,7 +58,8 @@ ssr = [
     "dep:tower-sessions-sqlx-store",
     "dep:tower",
     "dep:thiserror",
-    "dep:time",
+    "dep:uuid",
+    "dep:chrono",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
