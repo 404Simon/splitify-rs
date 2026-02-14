@@ -10,7 +10,8 @@ use crate::{
     pages::{
         GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
         LoginPage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow, RegisterPage,
-        SharedDebtsCreate, SharedDebtsEdit, TransactionsCreate, TransactionsEdit,
+        SharedDebtsCreate, SharedDebtsEdit, ShoppingListCreate, ShoppingListEdit, ShoppingListShow,
+        TransactionsCreate, TransactionsEdit,
     },
 };
 
@@ -88,6 +89,9 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/groups/:id/invites") view=GroupsInvites/>
                     <Route path=path!("/groups/:id/debts/create") view=SharedDebtsCreate/>
                     <Route path=path!("/groups/:id/debts/:debt_id/edit") view=SharedDebtsEdit/>
+                    <Route path=path!("/groups/:group_id/shopping-lists/create") view=ShoppingListCreate/>
+                    <Route path=path!("/groups/:group_id/shopping-lists/:list_id") view=ShoppingListShow/>
+                    <Route path=path!("/groups/:group_id/shopping-lists/:list_id/edit") view=ShoppingListEdit/>
                     <Route path=path!("/groups/:id/recurring-debts/create") view=RecurringDebtsCreate/>
                     <Route path=path!("/groups/:id/recurring-debts/:recurring_id") view=RecurringDebtsShow/>
                     <Route path=path!("/groups/:id/recurring-debts/:recurring_id/edit") view=RecurringDebtsEdit/>

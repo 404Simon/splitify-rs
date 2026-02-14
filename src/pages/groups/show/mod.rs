@@ -24,12 +24,14 @@ mod balances;
 mod members;
 mod recurring_debts;
 mod shared_debts;
+mod shopping_lists;
 mod transactions;
 
 use balances::BalancesSection;
 use members::MembersSection;
 use recurring_debts::RecurringDebtsSection;
 use shared_debts::SharedDebtsSection;
+use shopping_lists::ShoppingListsSection;
 use transactions::TransactionsSection;
 
 /// Group show page - displays group details and members
@@ -164,6 +166,7 @@ pub fn GroupsShow() -> impl IntoView {
                                                                 // Component sections
                                                                 <BalancesSection balances_resource=balances_resource />
                                                                 <MembersSection members_resource=members_resource />
+                                                                <ShoppingListsSection group_id=group_id />
                                                                 <SharedDebtsSection
                                                                     group_id=group_id
                                                                     shared_debts_resource=shared_debts_resource

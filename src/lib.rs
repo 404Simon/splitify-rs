@@ -11,6 +11,7 @@ pub mod features {
     pub mod invites;
     pub mod recurring_debts;
     pub mod shared_debts;
+    pub mod shopping_lists;
     pub mod transactions;
 }
 

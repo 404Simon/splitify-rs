@@ -3,16 +3,31 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
-    use axum::Router;
+    use std::convert::Infallible;
+
+    use axum::{
+        extract::{Path, State},
+        response::sse::{Event, KeepAlive, Sse},
+        routing::get,
+        Router,
+    };
+    use futures::stream::Stream;
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use rustify_app::{
-        app::*, db::init_db, features::recurring_debts::handlers::process_due_recurring_debts,
+        app::*,
+        db::init_db,
+        features::{
+            recurring_debts::handlers::process_due_recurring_debts,
+            shopping_lists::{create_broadcaster, EventBroadcaster},
+        },
     };
     use time::Duration;
+    use tokio::sync::broadcast;
     use tokio_cron_scheduler::{Job, JobScheduler};
+    use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
     use tower::ServiceBuilder;
-    use tower_sessions::{Expiry, SessionManagerLayer};
+    use tower_sessions::{Expiry, Session, SessionManagerLayer};
     use tower_sessions_sqlx_store::SqliteStore;
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -108,6 +123,52 @@ async fn main() {
 
     tracing::info!("Recurring debts scheduler started successfully");
 
+    // Create event broadcaster for shopping list real-time updates
+    let broadcaster = create_broadcaster();
+    tracing::debug!("Shopping list event broadcaster created");
+
+    // SSE endpoint handler for shopping list updates
+    async fn shopping_list_events(
+        Path((_group_id, list_id)): Path<(i64, i64)>,
+        State(broadcaster): State<EventBroadcaster>,
+        _session: Session,
+    ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+        // Get or create channel for this list
+        let tx = {
+            let mut map = broadcaster.write();
+            map.entry(list_id)
+                .or_insert_with(|| broadcast::channel(100).0)
+                .clone()
+        };
+
+        let rx = tx.subscribe();
+        let stream = BroadcastStream::new(rx).filter_map(|result| match result {
+            Ok(event) => {
+                // Serialize event to JSON
+                match serde_json::to_string(&event) {
+                    Ok(json) => Some(Ok(Event::default().data(json))),
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to serialize SSE event");
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "SSE broadcast stream error");
+                None
+            }
+        });
+
+        Sse::new(stream).keep_alive(KeepAlive::default())
+    }
+
+    let sse_router = Router::new()
+        .route(
+            "/api/groups/{group_id}/shopping-lists/{list_id}/events",
+            get(shopping_list_events),
+        )
+        .with_state(broadcaster.clone());
+
     let app = Router::new()
         .leptos_routes_with_context(
             &leptos_options,
@@ -115,9 +176,11 @@ async fn main() {
             {
                 let leptos_options = leptos_options.clone();
                 let pool = pool.clone();
+                let broadcaster = broadcaster.clone();
                 move || {
                     provide_context(leptos_options.clone());
                     provide_context(pool.clone());
+                    provide_context(broadcaster.clone());
                 }
             },
             {
@@ -125,9 +188,11 @@ async fn main() {
                 move || shell(leptos_options.clone())
             },
         )
+        .merge(sse_router)
         .fallback(leptos_axum::file_and_error_handler(shell))
         .layer(ServiceBuilder::new().layer(session_layer))
-        .with_state(leptos_options);
+        .with_state(leptos_options)
+        .with_state(broadcaster);
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

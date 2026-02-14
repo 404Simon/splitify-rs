@@ -5,6 +5,7 @@ pub mod login;
 pub mod recurring_debts;
 pub mod register;
 pub mod shared_debts;
+pub mod shopping_lists;
 pub mod transactions;
 
 // Re-export page components
@@ -15,4 +16,5 @@ pub use login::LoginPage;
 pub use recurring_debts::{RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow};
 pub use register::RegisterPage;
 pub use shared_debts::{SharedDebtsCreate, SharedDebtsEdit};
+pub use shopping_lists::{ShoppingListCreate, ShoppingListEdit, ShoppingListShow};
 pub use transactions::{TransactionsCreate, TransactionsEdit};
