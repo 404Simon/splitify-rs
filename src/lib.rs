@@ -16,6 +16,9 @@ pub mod features {
 #[cfg(feature = "ssr")]
 pub mod db;
 
+#[cfg(feature = "ssr")]
+pub mod error;
+
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {

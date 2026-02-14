@@ -57,6 +57,21 @@ pub async fn clear_session(session: &Session) -> Result<(), tower_sessions::sess
     session.delete().await
 }
 
+/// Require authentication - returns user session or error
+/// This is a helper to reduce boilerplate in server functions
+#[cfg(feature = "ssr")]
+pub async fn require_auth() -> Result<UserSession, ServerFnError> {
+    use leptos_axum::extract;
+
+    let session = extract::<Session>()
+        .await
+        .map_err(|_| ServerFnError::new("Authentication error"))?;
+
+    get_user_from_session(&session)
+        .await
+        .ok_or_else(|| ServerFnError::new("Not authenticated"))
+}
+
 /// Custom hook for handling logout with automatic navigation and context refresh
 ///
 /// This hook encapsulates all the logout logic including:

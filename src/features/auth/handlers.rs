@@ -133,7 +133,7 @@ pub async fn login_user(username: String, password: String) -> Result<UserSessio
         return Err(ServerFnError::new("Invalid username or password"));
     }
 
-    let user_session = user_session.unwrap(); // Safe because valid == true only when user exists
+    let user_session = user_session.ok_or_else(|| ServerFnError::new("Authentication error"))?;
 
     // Extract session using Axum extractor pattern
     let session = extract::<Session>()

@@ -17,19 +17,23 @@ async fn main() {
     use tower_sessions_sqlx_store::SqliteStore;
 
     // Initialize database
-    let pool = init_db().await.expect("Failed to initialize database");
+    let pool = init_db()
+        .await
+        .expect("FATAL: Failed to initialize database - check DATABASE_URL and migrations");
 
     // Setup session store
     let session_store = SqliteStore::new(pool.clone());
     session_store
         .migrate()
         .await
-        .expect("Failed to migrate session store");
+        .expect("FATAL: Failed to migrate session store - database may be corrupted");
 
     let session_layer = SessionManagerLayer::new(session_store)
         .with_expiry(Expiry::OnInactivity(Duration::weeks(1))); // 7 days
 
-    let conf = get_configuration(None).expect("Failed to load Leptos configuration");
+    let conf = get_configuration(None).expect(
+        "FATAL: Failed to load Leptos configuration - check Cargo.toml [package.metadata.leptos]",
+    );
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
@@ -49,7 +53,7 @@ async fn main() {
 
     let scheduler = JobScheduler::new()
         .await
-        .expect("Failed to create job scheduler");
+        .expect("FATAL: Failed to create job scheduler - system resources may be exhausted");
 
     let pool_for_scheduler = pool.clone();
     let job = Job::new_async(cron_expression.as_str(), move |_uuid, _lock| {
@@ -70,14 +74,17 @@ async fn main() {
             }
         })
     })
-    .expect("Failed to create cron job");
+    .expect("FATAL: Failed to create cron job - check RECURRING_DEBTS_CRON syntax");
 
     scheduler
         .add(job)
         .await
-        .expect("Failed to add job to scheduler");
+        .expect("FATAL: Failed to add job to scheduler");
 
-    scheduler.start().await.expect("Failed to start scheduler");
+    scheduler
+        .start()
+        .await
+        .expect("FATAL: Failed to start scheduler");
 
     log!("Recurring debts scheduler started successfully");
 
@@ -107,10 +114,10 @@ async fn main() {
     log!("listening on http://{}", &addr);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .expect("Failed to bind to address");
+        .expect("FATAL: Failed to bind to address - port may already be in use");
     axum::serve(listener, app.into_make_service())
         .await
-        .expect("Server error");
+        .expect("FATAL: Server error during runtime");
 }
 
 #[cfg(not(feature = "ssr"))]

@@ -247,7 +247,7 @@ pub fn GroupsInvites() -> impl IntoView {
                                                                                                                     </p>
                                                                                                     <div class="mt-2 bg-gray-50 dark:bg-gray-700 rounded p-2">
                                                                                                         <code class="text-xs text-gray-800 dark:text-gray-200 break-all select-all">
-                                                                                                            {format!("{}/invite/{}", window().location().origin().unwrap(), invite_uuid)}
+                                                                                                            {window().location().origin().map(|origin| format!("{}/invite/{}", origin, invite_uuid)).unwrap_or_else(|_| format!("/invite/{}", invite_uuid))}
                                                                                                         </code>
                                                                                                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                                                                             "Click text to select, then Ctrl+C to copy"
