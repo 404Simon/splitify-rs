@@ -9,7 +9,9 @@ async fn main() {
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use rustify_app::app::*;
     use rustify_app::db::init_db;
+    use rustify_app::features::recurring_debts::handlers::process_due_recurring_debts;
     use time::Duration;
+    use tokio_cron_scheduler::{Job, JobScheduler};
     use tower::ServiceBuilder;
     use tower_sessions::{Expiry, SessionManagerLayer};
     use tower_sessions_sqlx_store::SqliteStore;
@@ -32,6 +34,52 @@ async fn main() {
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(App);
+
+    // Start recurring debts cron scheduler
+    // Cron expression can be configured via RECURRING_DEBTS_CRON environment variable
+    // Default: "0 0 6 * * *" (daily at 6:00 AM)
+    // Format: sec min hour day_of_month month day_of_week
+    let cron_expression =
+        std::env::var("RECURRING_DEBTS_CRON").unwrap_or_else(|_| "0 0 6 * * *".to_string());
+
+    log!(
+        "Setting up recurring debts scheduler with cron expression: {}",
+        cron_expression
+    );
+
+    let scheduler = JobScheduler::new()
+        .await
+        .expect("Failed to create job scheduler");
+
+    let pool_for_scheduler = pool.clone();
+    let job = Job::new_async(cron_expression.as_str(), move |_uuid, _lock| {
+        let pool_clone = pool_for_scheduler.clone();
+        Box::pin(async move {
+            log!("Running scheduled recurring debts generation...");
+
+            // Provide the pool context for the server function
+            provide_context(pool_clone.clone());
+
+            match process_due_recurring_debts().await {
+                Ok(count) => {
+                    log!("Successfully generated {} recurring debts", count);
+                }
+                Err(e) => {
+                    eprintln!("Error processing recurring debts: {}", e);
+                }
+            }
+        })
+    })
+    .expect("Failed to create cron job");
+
+    scheduler
+        .add(job)
+        .await
+        .expect("Failed to add job to scheduler");
+
+    scheduler.start().await.expect("Failed to start scheduler");
+
+    log!("Recurring debts scheduler started successfully");
 
     let app = Router::new()
         .leptos_routes_with_context(

@@ -42,6 +42,9 @@ uuid = { version = "1", features = ["v4", "serde"], optional = true }
 # Date/time handling
 chrono = { version = "0.4", features = ["serde"], optional = true }
 
+# Cron scheduler for recurring debts
+tokio-cron-scheduler = { version = "0.13", optional = true }
+
 [features]
 hydrate = [
     "leptos/hydrate",
@@ -60,6 +63,7 @@ ssr = [
     "dep:thiserror",
     "dep:uuid",
     "dep:chrono",
+    "dep:tokio-cron-scheduler",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
