@@ -51,6 +51,13 @@ pub fn App() -> impl IntoView {
         // Meta tags for better SEO and appearance
         <Meta name="description" content="Rustify Splitify - Split expenses with friends, the Rust way. Fast, secure, and reliable expense tracking."/>
         <Meta name="theme-color" content="#4F46E5"/>
+        <Meta name="mobile-web-app-capable" content="yes"/>
+        <Meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+
+        // Favicon and app icons
+        <Link rel="icon" type_="image/svg+xml" href="/favicon.svg"/>
+        <Link rel="icon" sizes="192x192" href="/favicon-192x192.png"/>
+        <Link rel="apple-touch-icon" href="/favicon-192x192.png"/>
 
         // Google Fonts - Figtree font family
         <Link rel="preconnect" href="https://fonts.bunny.net"/>

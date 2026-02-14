@@ -1,5 +1,24 @@
 use leptos::prelude::*;
 
+/// Splitify pie chart icon component
+#[must_use]
+#[component]
+pub fn SplitifyIcon(#[prop(optional)] class: &'static str) -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class=class>
+            <circle cx="100" cy="100" r="80" fill="#6b7280"/>
+            <path d="M 100 100 L 180 100 A 80 80 0 0 1 156.56 156.56 Z" fill="#4b5563" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 156.56 156.56 A 80 80 0 0 1 100 180 Z" fill="#374151" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 100 180 A 80 80 0 0 1 43.44 156.56 Z" fill="#4b5563" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 43.44 156.56 A 80 80 0 0 1 20 100 Z" fill="#374151" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 20 100 A 80 80 0 0 1 43.44 43.44 Z" fill="#4b5563" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 43.44 43.44 A 80 80 0 0 1 100 20 Z" fill="#374151" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 100 20 A 80 80 0 0 1 156.56 43.44 Z" fill="#4b5563" stroke="#1f2937" stroke-width="1"/>
+            <path d="M 100 100 L 156.56 43.44 A 80 80 0 0 1 180 100 Z" fill="#374151" stroke="#1f2937" stroke-width="1"/>
+        </svg>
+    }
+}
+
 /// Primary button component matching Laravel's styling
 #[must_use]
 #[component]
@@ -84,8 +103,8 @@ pub fn GuestLayout(children: Children) -> impl IntoView {
         <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100 dark:bg-gray-900">
             <div>
                 <a href="/">
-                    <div class="w-20 h-20 flex items-center justify-center bg-gray-800 dark:bg-gray-200 rounded-full">
-                        <span class="text-3xl font-bold text-white dark:text-gray-800">"S"</span>
+                    <div class="w-20 h-20">
+                        <SplitifyIcon class="w-full h-full"/>
                     </div>
                 </a>
             </div>
@@ -111,8 +130,8 @@ pub fn Navigation(username: String, #[prop(into)] on_logout: Callback<()>) -> im
                         // Logo
                         <div class="shrink-0 flex items-center">
                             <a href="/groups" class="flex items-center">
-                                <div class="w-9 h-9 flex items-center justify-center bg-gray-800 dark:bg-gray-200 rounded-full">
-                                    <span class="text-lg font-bold text-white dark:text-gray-800">"S"</span>
+                                <div class="w-9 h-9">
+                                    <SplitifyIcon class="w-full h-full"/>
                                 </div>
                             </a>
                         </div>

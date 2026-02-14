@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
-use crate::features::auth::UserSession;
+use crate::{components::layout::SplitifyIcon, features::auth::UserSession};
 
 /// Home page component
 #[must_use]
@@ -32,8 +32,8 @@ pub fn HomePage() -> impl IntoView {
                                 // Authenticated user view
                                 <div class="max-w-4xl mx-auto text-center">
                                     <div class="mb-8">
-                                        <div class="inline-flex items-center justify-center w-24 h-24 bg-indigo-600 dark:bg-indigo-500 rounded-full mb-6 shadow-lg">
-                                            <span class="text-4xl font-bold text-white">"S"</span>
+                                        <div class="inline-flex items-center justify-center w-24 h-24 mb-6 shadow-lg">
+                                            <SplitifyIcon class="w-full h-full"/>
                                         </div>
                                         <h1 class="text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-white mb-4">
                                             "Welcome back, " <span class="text-indigo-600 dark:text-indigo-400">{user.username.clone()}</span> "!"
@@ -60,8 +60,8 @@ pub fn HomePage() -> impl IntoView {
                                 // Guest view
                                 <div class="max-w-5xl mx-auto">
                                     <div class="text-center mb-16">
-                                        <div class="inline-flex items-center justify-center w-24 h-24 bg-indigo-600 dark:bg-indigo-500 rounded-full mb-8 shadow-xl">
-                                            <span class="text-4xl font-bold text-white">"S"</span>
+                                        <div class="inline-flex items-center justify-center w-24 h-24 mb-8 shadow-xl">
+                                            <SplitifyIcon class="w-full h-full"/>
                                         </div>
                                         <h1 class="text-5xl md:text-7xl font-extrabold text-gray-900 dark:text-white mb-6">
                                             "Rustify " <span class="text-indigo-600 dark:text-indigo-400">"Splitify"</span>
