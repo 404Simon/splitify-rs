@@ -28,8 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -77,7 +76,7 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           gh release create "${{ inputs.version }}" \
             --draft=false \
