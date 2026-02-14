@@ -1,29 +1,25 @@
 //! Balance calculations combining shared debts and transactions
 
 use leptos::prelude::*;
-
-use crate::features::transactions::models::UserBalance;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use rust_decimal::Decimal;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
+use crate::features::transactions::models::UserBalance;
 #[cfg(feature = "ssr")]
 use crate::features::transactions::models::{DebtRelationship, NetType, RelationshipType};
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
 
 /// Calculate user debts for a group (combines shared debts and transactions)
 #[server(CalculateUserDebts)]
 pub async fn calculate_user_debts(group_id: i64) -> Result<Vec<UserBalance>, ServerFnError> {
-    use sqlx::SqlitePool;
     use std::collections::HashMap;
+
+    use sqlx::SqlitePool;
 
     let session = extract::<Session>()
         .await

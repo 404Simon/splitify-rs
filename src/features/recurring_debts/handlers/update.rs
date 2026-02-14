@@ -1,24 +1,19 @@
 //! Update operations for recurring debts
 
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use rust_decimal::Decimal;
+#[cfg(feature = "ssr")]
+use time::Date;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
 #[cfg(feature = "ssr")]
 use crate::features::recurring_debts::models::Frequency;
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
-
-#[cfg(feature = "ssr")]
-use time::Date;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
 
 /// Server function: Update a recurring debt
 #[server(UpdateRecurringDebt)]

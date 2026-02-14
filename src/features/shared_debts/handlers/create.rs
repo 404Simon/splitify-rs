@@ -1,16 +1,13 @@
 use leptos::prelude::*;
-
 #[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
 #[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
+use crate::validation::{validate_amount, validate_name};
 
 /// Server function: Create a new shared debt
 #[server(CreateSharedDebt)]
@@ -22,24 +19,11 @@ pub async fn create_shared_debt(
 ) -> Result<i64, ServerFnError> {
     use sqlx::SqlitePool;
 
-    // Validation
-    if name.trim().is_empty() {
-        return Err(ServerFnError::new("Debt name is required"));
-    }
+    // Validate debt name
+    let name = validate_name(&name, 1, 255, "Debt name")?;
 
-    if name.len() > 255 {
-        return Err(ServerFnError::new(
-            "Debt name must be 255 characters or less",
-        ));
-    }
-
-    let amount_decimal = amount
-        .parse::<Decimal>()
-        .map_err(|_| ServerFnError::new("Invalid amount format"))?;
-
-    if amount_decimal <= Decimal::ZERO {
-        return Err(ServerFnError::new("Amount must be greater than zero"));
-    }
+    // Validate amount
+    let amount_decimal = validate_amount(&amount)?;
 
     if member_ids.is_empty() {
         return Err(ServerFnError::new(
@@ -53,7 +37,7 @@ pub async fn create_shared_debt(
 
     let user = get_user_from_session(&session)
         .await
-        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
+        .ok_or_else(|| ServerFnError::new("Not authenticated. Please log in."))?;
 
     let pool = expect_context::<SqlitePool>();
 
@@ -69,7 +53,7 @@ pub async fn create_shared_debt(
 
     if is_member.count == 0 {
         return Err(ServerFnError::new(
-            "Unauthorized: Not a member of this group",
+            "You don't have permission to access this group",
         ));
     }
 

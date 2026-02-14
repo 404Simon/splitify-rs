@@ -1,16 +1,22 @@
-use crate::components::{
-    AppLayout, ErrorAlert, FormActions, FormCard, FormDateInput, FormField, FormInput,
-    FormNumberInput, FormSelect, LoadingSpinner, MemberCheckboxItem, Navigation, PageHeader,
-};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::get_group_members;
-use crate::features::recurring_debts::handlers::{
-    get_recurring_debt, get_recurring_debt_members, UpdateRecurringDebt,
-};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::{
+    components::{
+        AppLayout, ErrorAlert, FormActions, FormCard, FormDateInput, FormField, FormInput,
+        FormNumberInput, FormSelect, LoadingSpinner, MemberCheckboxItem, Navigation, PageHeader,
+    },
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::get_group_members,
+        recurring_debts::handlers::{
+            get_recurring_debt, get_recurring_debt_members, UpdateRecurringDebt,
+        },
+    },
+};
+
 /// Edit recurring debt page
+#[must_use]
 #[component]
 pub fn RecurringDebtsEdit() -> impl IntoView {
     let user_resource =

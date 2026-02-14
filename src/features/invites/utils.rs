@@ -1,6 +1,5 @@
 #[cfg(feature = "ssr")]
 use time::{Duration, OffsetDateTime};
-
 #[cfg(feature = "ssr")]
 use uuid::Uuid;
 

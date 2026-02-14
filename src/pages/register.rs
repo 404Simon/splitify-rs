@@ -1,9 +1,13 @@
-use crate::components::{GuestLayout, InputLabel, PrimaryButton, TextInput};
-use crate::features::auth::{RegisterUser, UserSession};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_query_map};
 
+use crate::{
+    components::{GuestLayout, InputLabel, PrimaryButton, TextInput},
+    features::auth::{RegisterUser, UserSession},
+};
+
 /// Registration page component
+#[must_use]
 #[component]
 pub fn RegisterPage() -> impl IntoView {
     let register_action = ServerAction::<RegisterUser>::new();

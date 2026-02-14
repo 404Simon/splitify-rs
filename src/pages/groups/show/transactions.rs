@@ -1,7 +1,9 @@
-use crate::features::transactions::models::TransactionWithDetails;
 use leptos::prelude::*;
 
+use crate::features::transactions::models::TransactionWithDetails;
+
 /// Transactions section component
+#[must_use]
 #[component]
 pub fn TransactionsSection(
     group_id: Memo<i64>,

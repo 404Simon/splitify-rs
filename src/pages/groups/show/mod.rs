@@ -1,18 +1,24 @@
 //! Group show page - split into modular components
 //!
-//! This module contains the main GroupsShow page component and its sub-sections.
-//! Each section is separated into its own file for better maintainability.
+//! This module contains the main GroupsShow page component and its
+//! sub-sections. Each section is separated into its own file for better
+//! maintainability.
 
-use crate::components::{AppLayout, Navigation};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::{get_group, get_group_members};
-use crate::features::recurring_debts::handlers::{get_recurring_debts, DeleteRecurringDebt};
-use crate::features::shared_debts::handlers::{get_group_shared_debts, DeleteSharedDebt};
-use crate::features::transactions::handlers::{
-    calculate_user_debts, delete_transaction, get_group_transactions,
-};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
+
+use crate::{
+    components::{AppLayout, Navigation},
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::{get_group, get_group_members},
+        recurring_debts::handlers::{get_recurring_debts, DeleteRecurringDebt},
+        shared_debts::handlers::{get_group_shared_debts, DeleteSharedDebt},
+        transactions::handlers::{
+            calculate_user_debts, delete_transaction, get_group_transactions,
+        },
+    },
+};
 
 mod balances;
 mod members;
@@ -27,6 +33,7 @@ use shared_debts::SharedDebtsSection;
 use transactions::TransactionsSection;
 
 /// Group show page - displays group details and members
+#[must_use]
 #[component]
 pub fn GroupsShow() -> impl IntoView {
     let user_resource =

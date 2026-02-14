@@ -1,10 +1,16 @@
-use crate::components::{AppLayout, Navigation};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::get_user_groups;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
+use crate::{
+    components::{AppLayout, Navigation},
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::get_user_groups,
+    },
+};
+
 /// Groups index page - lists all user's groups
+#[must_use]
 #[component]
 pub fn GroupsIndex() -> impl IntoView {
     let user_resource =

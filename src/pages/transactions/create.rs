@@ -1,14 +1,19 @@
-use crate::components::{
-    AppLayout, ErrorAlert, FormActions, FormCard, FormField, FormInput, FormNumberInput,
-    FormSelect, LoadingSpinner, Navigation, PageHeader,
-};
-use crate::features::auth::{models::UserSession, use_logout};
-use crate::features::groups::handlers::get_group_members;
-use crate::features::transactions::handlers::create_transaction;
-use leptos::prelude::*;
-use leptos::task::spawn_local;
+use leptos::{prelude::*, task::spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::{
+    components::{
+        AppLayout, ErrorAlert, FormActions, FormCard, FormField, FormInput, FormNumberInput,
+        FormSelect, LoadingSpinner, Navigation, PageHeader,
+    },
+    features::{
+        auth::{models::UserSession, use_logout},
+        groups::handlers::get_group_members,
+        transactions::handlers::create_transaction,
+    },
+};
+
+#[must_use]
 #[component]
 pub fn TransactionsCreate() -> impl IntoView {
     let user_resource =

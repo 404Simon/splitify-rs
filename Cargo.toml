@@ -45,6 +45,13 @@ chrono = { version = "0.4", features = ["serde"], optional = true }
 # Cron scheduler for recurring debts
 tokio-cron-scheduler = { version = "0.13", optional = true }
 
+# Input validation
+regex = { version = "1", optional = true }
+
+# Structured logging
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
 [features]
 hydrate = [
     "leptos/hydrate",
@@ -64,6 +71,9 @@ ssr = [
     "dep:uuid",
     "dep:chrono",
     "dep:tokio-cron-scheduler",
+    "dep:regex",
+    "dep:tracing",
+    "dep:tracing-subscriber",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",

@@ -1,12 +1,11 @@
-use super::models::UserSession;
-
 #[cfg(feature = "ssr")]
 use bcrypt::{hash, verify, DEFAULT_COST};
+use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 #[cfg(feature = "ssr")]
 use tower_sessions::Session;
 
-use leptos::prelude::*;
-use leptos_router::hooks::use_navigate;
+use super::models::UserSession;
 
 /// Hash a password using bcrypt with default cost
 #[cfg(feature = "ssr")]
@@ -20,21 +19,9 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, bcrypt::Bcryp
     verify(password, hash)
 }
 
-/// Validate email format using simple regex pattern
-#[cfg(feature = "ssr")]
-pub fn is_valid_email(email: &str) -> bool {
-    // Simple email validation - checks for basic format: something@something.something
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-
-    let local = parts[0];
-    let domain = parts[1];
-
-    // Local part should not be empty and domain should contain a dot
-    !local.is_empty() && domain.contains('.') && domain.len() > 3
-}
+// Email validation has been moved to the centralized validation module
+// Use crate::validation::is_valid_email or crate::validation::validate_email
+// instead
 
 /// Retrieve user session from tower-sessions
 #[cfg(feature = "ssr")]
@@ -72,7 +59,8 @@ pub async fn require_auth() -> Result<UserSession, ServerFnError> {
         .ok_or_else(|| ServerFnError::new("Not authenticated"))
 }
 
-/// Custom hook for handling logout with automatic navigation and context refresh
+/// Custom hook for handling logout with automatic navigation and context
+/// refresh
 ///
 /// This hook encapsulates all the logout logic including:
 /// - Dispatching the logout server action
@@ -83,18 +71,13 @@ pub async fn require_auth() -> Result<UserSession, ServerFnError> {
 /// A callback that can be used in onClick handlers to trigger logout
 ///
 /// # Example
-/// ```
-/// use crate::features::auth::use_logout;
+/// ```ignore
+/// let on_logout = use_logout();
 ///
-/// #[component]
-/// pub fn MyComponent() -> impl IntoView {
-///     let on_logout = use_logout();
-///     
-///     view! {
-///         <button on:click=move |_| on_logout.run(())>
-///             "Logout"
-///         </button>
-///     }
+/// view! {
+///     <button on:click=move |_| on_logout.run(())>
+///         "Logout"
+///     </button>
 /// }
 /// ```
 pub fn use_logout() -> Callback<()> {

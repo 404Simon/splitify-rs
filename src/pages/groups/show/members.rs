@@ -1,7 +1,9 @@
-use crate::features::groups::models::GroupMemberInfo;
 use leptos::prelude::*;
 
+use crate::features::groups::models::GroupMemberInfo;
+
 /// Group members section component
+#[must_use]
 #[component]
 pub fn MembersSection(
     members_resource: LocalResource<Result<Vec<GroupMemberInfo>, ServerFnError>>,

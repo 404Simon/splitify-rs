@@ -64,8 +64,9 @@ pub fn should_generate(recurring_debt: &RecurringDebt, today: Date) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use time::Month;
+
+    use super::*;
 
     #[test]
     fn test_calculate_next_occurrence_daily() {

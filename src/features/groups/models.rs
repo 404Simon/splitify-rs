@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
-
 #[cfg(feature = "ssr")]
 use sqlx::FromRow;
+use time::OffsetDateTime;
 
 /// Group model representing a group in the database
 #[derive(Clone, Debug, Serialize, Deserialize)]

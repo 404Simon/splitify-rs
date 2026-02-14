@@ -1,16 +1,15 @@
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 use super::models::{Group, GroupMemberInfo, GroupWithMembers};
 use crate::features::auth::models::UserSession;
-
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
 #[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
+use crate::validation::validate_name;
 
 /// Server function: Get all groups for the current user
 #[server(GetUserGroups)]
@@ -194,15 +193,8 @@ pub async fn get_group_members(group_id: i64) -> Result<Vec<GroupMemberInfo>, Se
 pub async fn create_group(name: String) -> Result<i64, ServerFnError> {
     use sqlx::SqlitePool;
 
-    if name.trim().is_empty() {
-        return Err(ServerFnError::new("Group name is required"));
-    }
-
-    if name.len() > 255 {
-        return Err(ServerFnError::new(
-            "Group name must be 255 characters or less",
-        ));
-    }
+    // Validate group name
+    let name = validate_name(&name, 1, 255, "Group name")?;
 
     let session = extract::<Session>()
         .await
@@ -259,15 +251,8 @@ pub async fn update_group(
 ) -> Result<(), ServerFnError> {
     use sqlx::SqlitePool;
 
-    if name.trim().is_empty() {
-        return Err(ServerFnError::new("Group name is required"));
-    }
-
-    if name.len() > 255 {
-        return Err(ServerFnError::new(
-            "Group name must be 255 characters or less",
-        ));
-    }
+    // Validate group name
+    let name = validate_name(&name, 1, 255, "Group name")?;
 
     let session = extract::<Session>()
         .await

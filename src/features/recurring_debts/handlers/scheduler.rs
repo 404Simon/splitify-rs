@@ -1,18 +1,15 @@
 //! Background job for processing due recurring debts
 
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use rust_decimal::Decimal;
+#[cfg(feature = "ssr")]
+use time::Date;
 
 #[cfg(feature = "ssr")]
 use crate::features::recurring_debts::models::{Frequency, RecurringDebt};
-
 #[cfg(feature = "ssr")]
 use crate::features::recurring_debts::utils::{calculate_next_occurrence, should_generate};
-
-#[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
-
-#[cfg(feature = "ssr")]
-use time::Date;
 
 /// Server function: Process all due recurring debts (background job)
 #[server(ProcessDueRecurringDebts)]

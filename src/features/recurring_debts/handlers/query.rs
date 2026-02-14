@@ -1,26 +1,20 @@
 //! Query operations for recurring debts (read-only operations)
 
 use leptos::prelude::*;
-
-use crate::features::recurring_debts::models::RecurringDebtWithDetails;
-
 #[cfg(feature = "ssr")]
-use crate::features::recurring_debts::models::Frequency;
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use rust_decimal::Decimal;
+#[cfg(feature = "ssr")]
+use time::Date;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
 #[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
-
-#[cfg(feature = "ssr")]
-use time::Date;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
+use crate::features::recurring_debts::models::Frequency;
+use crate::features::recurring_debts::models::RecurringDebtWithDetails;
 
 /// Server function: Get all recurring debts for a group
 #[server(GetRecurringDebts)]

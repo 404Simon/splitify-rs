@@ -1,17 +1,14 @@
 //! Query operations for transactions (read-only operations)
 
 use leptos::prelude::*;
-
-use crate::features::transactions::models::{Transaction, TransactionWithDetails};
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
+use crate::features::transactions::models::{Transaction, TransactionWithDetails};
 
 /// Get a single transaction by ID
 #[server(GetTransaction)]

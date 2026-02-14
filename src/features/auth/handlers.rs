@@ -1,21 +1,18 @@
 use leptos::prelude::*;
-
-use super::models::UserSession;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use super::models::User;
-
+use super::models::UserSession;
 #[cfg(feature = "ssr")]
 use super::utils::{
-    clear_session, get_user_from_session, hash_password, is_valid_email, set_user_in_session,
-    verify_password,
+    clear_session, get_user_from_session, hash_password, set_user_in_session, verify_password,
 };
-
 #[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
+use crate::validation::{validate_email, validate_password, validate_username};
 
 /// Server function: Register a new user
 #[server(RegisterUser)]
@@ -26,20 +23,17 @@ pub async fn register_user(
 ) -> Result<UserSession, ServerFnError> {
     use sqlx::SqlitePool;
 
-    if username.is_empty() || password.is_empty() {
-        return Err(ServerFnError::new("Username and password are required"));
-    }
+    // Validate username
+    let username = validate_username(&username)?;
 
-    if password.len() < 8 {
-        return Err(ServerFnError::new("Password must be at least 8 characters"));
-    }
+    // Validate password
+    validate_password(&password)?;
 
     // Validate email if provided
-    if let Some(ref email_str) = email {
-        if !email_str.is_empty() && !is_valid_email(email_str) {
-            return Err(ServerFnError::new("Invalid email address"));
-        }
-    }
+    let email = match email {
+        Some(ref email_str) if !email_str.trim().is_empty() => Some(validate_email(email_str)?),
+        _ => None,
+    };
 
     // Get pool from context (provided in main.rs)
     let pool = expect_context::<SqlitePool>();
@@ -52,7 +46,9 @@ pub async fn register_user(
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     if existing.is_some() {
-        return Err(ServerFnError::new("Username already exists"));
+        return Err(ServerFnError::new(
+            "Username already exists. Please choose a different username.",
+        ));
     }
 
     // Insert new user
@@ -90,6 +86,10 @@ pub async fn register_user(
 pub async fn login_user(username: String, password: String) -> Result<UserSession, ServerFnError> {
     use sqlx::SqlitePool;
 
+    use crate::validation::sanitize_string;
+
+    // Basic validation (don't validate username format on login, only sanitize)
+    let username = sanitize_string(&username);
     if username.is_empty() || password.is_empty() {
         return Err(ServerFnError::new("Username and password are required"));
     }

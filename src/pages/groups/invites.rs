@@ -1,12 +1,20 @@
-use crate::components::{AppLayout, Navigation};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::get_group;
-use crate::features::invites::handlers::{get_group_invites, CreateInvite, DeleteInvite};
-use crate::features::invites::models::InviteListItem;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::{
+    components::{AppLayout, Navigation},
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::get_group,
+        invites::{
+            handlers::{get_group_invites, CreateInvite, DeleteInvite},
+            models::InviteListItem,
+        },
+    },
+};
+
 /// Groups invites page - manage invites for a group
+#[must_use]
 #[component]
 pub fn GroupsInvites() -> impl IntoView {
     let user_resource =

@@ -1,9 +1,8 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
-
 #[cfg(feature = "ssr")]
 use sqlx::FromRow;
+use time::OffsetDateTime;
 
 /// SharedDebt model representing a shared expense in a group
 /// Note: We don't derive FromRow because amount needs custom parsing from TEXT

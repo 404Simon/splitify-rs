@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
-
 #[cfg(feature = "ssr")]
 use sqlx::FromRow;
+use time::OffsetDateTime;
 
 /// Invite model representing an invite link to a group
 #[derive(Clone, Debug, Serialize, Deserialize)]

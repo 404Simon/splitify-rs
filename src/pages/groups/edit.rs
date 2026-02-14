@@ -1,17 +1,21 @@
-use crate::components::{
-    forms::{
-        CancelButton, ErrorAlert, FormCard, FormField, FormInput, LoadingSpinner, SubmitButton,
-    },
-    AppLayout, Navigation,
-};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::{
-    get_all_users, get_group, get_group_members, DeleteGroup, UpdateGroup,
-};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::{
+    components::{
+        forms::{
+            CancelButton, ErrorAlert, FormCard, FormField, FormInput, LoadingSpinner, SubmitButton,
+        },
+        AppLayout, Navigation,
+    },
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::{get_all_users, get_group, get_group_members, DeleteGroup, UpdateGroup},
+    },
+};
+
 /// Groups edit page - edit group name and members
+#[must_use]
 #[component]
 pub fn GroupsEdit() -> impl IntoView {
     let user_resource =

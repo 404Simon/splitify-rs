@@ -1,13 +1,11 @@
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
 
 /// Server function: Delete a shared debt
 #[server(DeleteSharedDebt)]

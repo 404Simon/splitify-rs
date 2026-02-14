@@ -1,8 +1,10 @@
-use crate::features::auth::UserSession;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
+use crate::features::auth::UserSession;
+
 /// Home page component
+#[must_use]
 #[component]
 pub fn HomePage() -> impl IntoView {
     let user_resource =

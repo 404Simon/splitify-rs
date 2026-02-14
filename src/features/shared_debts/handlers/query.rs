@@ -1,21 +1,16 @@
 use leptos::prelude::*;
-
-use crate::features::shared_debts::models::{SharedDebtWithDetails, UserShare};
-
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
 #[cfg(feature = "ssr")]
 use rust_decimal::Decimal;
-
 #[cfg(feature = "ssr")]
-use crate::features::shared_debts::utils::calculate_shares;
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
+use crate::features::shared_debts::models::{SharedDebtWithDetails, UserShare};
 #[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
+use crate::features::shared_debts::utils::calculate_shares;
 
 /// Server function: Get a specific shared debt
 #[server(GetSharedDebt)]

@@ -1,7 +1,9 @@
-use crate::features::transactions::models::{NetType, RelationshipType, UserBalance};
 use leptos::prelude::*;
 
+use crate::features::transactions::models::{NetType, RelationshipType, UserBalance};
+
 /// Balance overview section component
+#[must_use]
 #[component]
 pub fn BalancesSection(
     balances_resource: LocalResource<Result<Vec<UserBalance>, ServerFnError>>,

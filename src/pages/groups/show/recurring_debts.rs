@@ -1,8 +1,11 @@
-use crate::features::recurring_debts::handlers::DeleteRecurringDebt;
-use crate::features::recurring_debts::models::RecurringDebtWithDetails;
 use leptos::prelude::*;
 
+use crate::features::recurring_debts::{
+    handlers::DeleteRecurringDebt, models::RecurringDebtWithDetails,
+};
+
 /// Recurring debts section component
+#[must_use]
 #[component]
 pub fn RecurringDebtsSection(
     group_id: Memo<i64>,

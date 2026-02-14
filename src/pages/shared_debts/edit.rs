@@ -1,16 +1,20 @@
-use crate::components::{
-    AppLayout, ErrorAlert, FormActions, FormCard, FormField, FormNumberInput, LoadingSpinner,
-    MemberCheckboxItem, Navigation, PageHeader,
-};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::get_group_members;
-use crate::features::shared_debts::handlers::{
-    get_shared_debt, get_shared_debt_members, UpdateSharedDebt,
-};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::{
+    components::{
+        AppLayout, ErrorAlert, FormActions, FormCard, FormField, FormNumberInput, LoadingSpinner,
+        MemberCheckboxItem, Navigation, PageHeader,
+    },
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::get_group_members,
+        shared_debts::handlers::{get_shared_debt, get_shared_debt_members, UpdateSharedDebt},
+    },
+};
+
 /// Edit shared debt page
+#[must_use]
 #[component]
 pub fn SharedDebtsEdit() -> impl IntoView {
     let user_resource =

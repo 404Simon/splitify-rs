@@ -1,14 +1,17 @@
-use crate::features::auth::get_user;
-use crate::pages::{
-    GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
-    LoginPage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow, RegisterPage,
-    SharedDebtsCreate, SharedDebtsEdit, TransactionsCreate, TransactionsEdit,
-};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
     path, StaticSegment,
+};
+
+use crate::{
+    features::auth::get_user,
+    pages::{
+        GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
+        LoginPage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow, RegisterPage,
+        SharedDebtsCreate, SharedDebtsEdit, TransactionsCreate, TransactionsEdit,
+    },
 };
 
 /// Shell function for SSR HTML template
@@ -31,6 +34,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 }
 
 /// Root application component
+#[must_use]
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.

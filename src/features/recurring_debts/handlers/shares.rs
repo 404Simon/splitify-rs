@@ -1,23 +1,18 @@
 //! Share calculations for recurring debts
 
 use leptos::prelude::*;
-
-use crate::features::recurring_debts::models::RecurringDebtMember;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use rust_decimal::Decimal;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
+use crate::features::recurring_debts::models::RecurringDebtMember;
 #[cfg(feature = "ssr")]
 use crate::features::shared_debts::utils::calculate_shares;
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
 
 /// Server function: Get member shares for a recurring debt (for display)
 #[server(GetRecurringDebtShares)]

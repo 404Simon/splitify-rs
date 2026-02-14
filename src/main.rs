@@ -4,22 +4,37 @@
 #[tokio::main]
 async fn main() {
     use axum::Router;
-    use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
-    use rustify_app::app::*;
-    use rustify_app::db::init_db;
-    use rustify_app::features::recurring_debts::handlers::process_due_recurring_debts;
+    use rustify_app::{
+        app::*, db::init_db, features::recurring_debts::handlers::process_due_recurring_debts,
+    };
     use time::Duration;
     use tokio_cron_scheduler::{Job, JobScheduler};
     use tower::ServiceBuilder;
     use tower_sessions::{Expiry, SessionManagerLayer};
     use tower_sessions_sqlx_store::SqliteStore;
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+    // Initialize structured logging
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                // Default log levels: debug for our app, info for dependencies
+                "rustify_app=debug,tower_http=debug,axum=info,sqlx=warn".into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    tracing::info!("Starting Rustify Splitify application");
 
     // Initialize database
     let pool = init_db()
         .await
         .expect("FATAL: Failed to initialize database - check DATABASE_URL and migrations");
+
+    tracing::info!("Database initialized successfully");
 
     // Setup session store
     let session_store = SqliteStore::new(pool.clone());
@@ -27,6 +42,8 @@ async fn main() {
         .migrate()
         .await
         .expect("FATAL: Failed to migrate session store - database may be corrupted");
+
+    tracing::debug!("Session store migrated successfully");
 
     let session_layer = SessionManagerLayer::new(session_store)
         .with_expiry(Expiry::OnInactivity(Duration::weeks(1))); // 7 days
@@ -40,15 +57,15 @@ async fn main() {
     let routes = generate_route_list(App);
 
     // Start recurring debts cron scheduler
-    // Cron expression can be configured via RECURRING_DEBTS_CRON environment variable
-    // Default: "0 0 6 * * *" (daily at 6:00 AM)
+    // Cron expression can be configured via RECURRING_DEBTS_CRON environment
+    // variable Default: "0 0 6 * * *" (daily at 6:00 AM)
     // Format: sec min hour day_of_month month day_of_week
     let cron_expression =
         std::env::var("RECURRING_DEBTS_CRON").unwrap_or_else(|_| "0 0 6 * * *".to_string());
 
-    log!(
-        "Setting up recurring debts scheduler with cron expression: {}",
-        cron_expression
+    tracing::info!(
+        cron_expression = %cron_expression,
+        "Setting up recurring debts scheduler"
     );
 
     let scheduler = JobScheduler::new()
@@ -59,17 +76,20 @@ async fn main() {
     let job = Job::new_async(cron_expression.as_str(), move |_uuid, _lock| {
         let pool_clone = pool_for_scheduler.clone();
         Box::pin(async move {
-            log!("Running scheduled recurring debts generation...");
+            tracing::info!("Running scheduled recurring debts generation");
 
             // Provide the pool context for the server function
             provide_context(pool_clone.clone());
 
             match process_due_recurring_debts().await {
                 Ok(count) => {
-                    log!("Successfully generated {} recurring debts", count);
+                    tracing::info!(count = count, "Successfully generated recurring debts");
                 }
                 Err(e) => {
-                    eprintln!("Error processing recurring debts: {}", e);
+                    tracing::error!(
+                        error = %e,
+                        "Failed to process recurring debts"
+                    );
                 }
             }
         })
@@ -86,7 +106,7 @@ async fn main() {
         .await
         .expect("FATAL: Failed to start scheduler");
 
-    log!("Recurring debts scheduler started successfully");
+    tracing::info!("Recurring debts scheduler started successfully");
 
     let app = Router::new()
         .leptos_routes_with_context(
@@ -111,7 +131,7 @@ async fn main() {
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
-    log!("listening on http://{}", &addr);
+    tracing::info!("Server listening on http://{}", &addr);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("FATAL: Failed to bind to address - port may already be in use");

@@ -1,17 +1,22 @@
-use crate::components::{
-    forms::{
-        CancelButton, ErrorAlert, FormCard, FormField, FormInput, LoadingSpinner, PageHeader,
-        SubmitButton,
-    },
-    AppLayout, Navigation,
-};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::groups::handlers::CreateGroup;
-use leptos::ev;
-use leptos::prelude::*;
+use leptos::{ev, prelude::*};
 use leptos_router::hooks::use_navigate;
 
+use crate::{
+    components::{
+        forms::{
+            CancelButton, ErrorAlert, FormCard, FormField, FormInput, LoadingSpinner, PageHeader,
+            SubmitButton,
+        },
+        AppLayout, Navigation,
+    },
+    features::{
+        auth::{use_logout, UserSession},
+        groups::handlers::CreateGroup,
+    },
+};
+
 /// Create group page
+#[must_use]
 #[component]
 pub fn GroupsCreate() -> impl IntoView {
     let user_resource =

@@ -1,29 +1,22 @@
 //! Operations for managing generated instances (SharedDebts)
 
 use leptos::prelude::*;
-
-use crate::features::recurring_debts::models::GeneratedInstance;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use rust_decimal::Decimal;
+#[cfg(feature = "ssr")]
+use time::Date;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
 #[cfg(feature = "ssr")]
 use crate::features::recurring_debts::models::Frequency;
-
+use crate::features::recurring_debts::models::GeneratedInstance;
 #[cfg(feature = "ssr")]
 use crate::features::recurring_debts::utils::calculate_next_occurrence;
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use rust_decimal::Decimal;
-
-#[cfg(feature = "ssr")]
-use time::Date;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
 
 /// Server function: Get generated instances (SharedDebts) from a recurring debt
 #[server(GetGeneratedInstances)]

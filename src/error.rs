@@ -41,7 +41,8 @@ impl AppError {
     /// Convert to ServerFnError
     pub fn into_server_error(self) -> ServerFnError {
         // Convert AppError to ServerFnError
-        // For production, you might want to log detailed errors but return generic messages
+        // For production, you might want to log detailed errors but return generic
+        // messages
         match self {
             Self::Database(e) => {
                 // Log the actual database error

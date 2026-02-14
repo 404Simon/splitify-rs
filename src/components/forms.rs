@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 /// Form field component with label
+#[must_use]
 #[component]
 pub fn FormField(
     /// Label text
@@ -30,6 +31,7 @@ pub fn FormField(
 }
 
 /// Text input component with consistent styling
+#[must_use]
 #[component]
 pub fn FormInput(
     /// Input ID
@@ -69,6 +71,7 @@ pub fn FormInput(
 }
 
 /// Number input component with consistent styling
+#[must_use]
 #[component]
 pub fn FormNumberInput(
     /// Input ID
@@ -113,6 +116,7 @@ pub fn FormNumberInput(
 }
 
 /// Date input component with consistent styling
+#[must_use]
 #[component]
 pub fn FormDateInput(
     /// Input ID
@@ -145,6 +149,7 @@ pub fn FormDateInput(
 }
 
 /// Select dropdown component with consistent styling
+#[must_use]
 #[component]
 pub fn FormSelect(
     /// Input ID
@@ -180,6 +185,7 @@ pub fn FormSelect(
 }
 
 /// Checkbox list component for member selection
+#[must_use]
 #[component]
 pub fn FormCheckboxList<T, IV>(
     /// The items to display
@@ -228,6 +234,7 @@ where
 }
 
 /// Simple checkbox list item for member selection (most common use case)
+#[must_use]
 #[component]
 pub fn MemberCheckboxItem(
     /// Member ID
@@ -263,6 +270,7 @@ pub fn MemberCheckboxItem(
 }
 
 /// Error alert component
+#[must_use]
 #[component]
 pub fn ErrorAlert(
     /// Error message to display
@@ -279,6 +287,7 @@ pub fn ErrorAlert(
 }
 
 /// Success alert component
+#[must_use]
 #[component]
 pub fn SuccessAlert(
     /// Success message to display
@@ -292,6 +301,7 @@ pub fn SuccessAlert(
 }
 
 /// Info alert component
+#[must_use]
 #[component]
 pub fn InfoAlert(
     /// Info message to display
@@ -305,6 +315,7 @@ pub fn InfoAlert(
 }
 
 /// Primary submit button with loading state
+#[must_use]
 #[component]
 pub fn SubmitButton(
     /// Button text when not loading
@@ -334,6 +345,7 @@ pub fn SubmitButton(
 }
 
 /// Cancel button/link component
+#[must_use]
 #[component]
 pub fn CancelButton(
     /// URL to navigate to when clicked
@@ -350,6 +362,7 @@ pub fn CancelButton(
 }
 
 /// Form action buttons container (submit + cancel)
+#[must_use]
 #[component]
 pub fn FormActions(
     /// Submit button text
@@ -372,6 +385,7 @@ pub fn FormActions(
 }
 
 /// Page header component
+#[must_use]
 #[component]
 pub fn PageHeader(
     /// Page title
@@ -393,6 +407,7 @@ pub fn PageHeader(
 }
 
 /// Form card container
+#[must_use]
 #[component]
 pub fn FormCard(children: Children) -> impl IntoView {
     view! {
@@ -403,6 +418,7 @@ pub fn FormCard(children: Children) -> impl IntoView {
 }
 
 /// Loading spinner component
+#[must_use]
 #[component]
 pub fn LoadingSpinner() -> impl IntoView {
     view! {

@@ -1,8 +1,12 @@
-use crate::features::shared_debts::handlers::{get_shared_debt_shares, DeleteSharedDebt};
-use crate::features::shared_debts::models::SharedDebtWithDetails;
 use leptos::prelude::*;
 
+use crate::features::shared_debts::{
+    handlers::{get_shared_debt_shares, DeleteSharedDebt},
+    models::SharedDebtWithDetails,
+};
+
 /// Shared debts section component
+#[must_use]
 #[component]
 pub fn SharedDebtsSection(
     group_id: Memo<i64>,

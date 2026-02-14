@@ -1,15 +1,13 @@
 //! Delete operations for recurring debts
 
 use leptos::prelude::*;
+#[cfg(feature = "ssr")]
+use leptos_axum::extract;
+#[cfg(feature = "ssr")]
+use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-
-#[cfg(feature = "ssr")]
-use leptos_axum::extract;
-
-#[cfg(feature = "ssr")]
-use tower_sessions::Session;
 
 /// Server function: Delete a recurring debt
 #[server(DeleteRecurringDebt)]
@@ -46,7 +44,8 @@ pub async fn delete_recurring_debt(recurring_debt_id: i64) -> Result<(), ServerF
         ));
     }
 
-    // Delete the recurring debt (cascade will handle pivot table and set NULL on shared_debts)
+    // Delete the recurring debt (cascade will handle pivot table and set NULL on
+    // shared_debts)
     sqlx::query!(
         "DELETE FROM recurring_debts WHERE id = ?",
         recurring_debt_id

@@ -1,0 +1,10 @@
+# Clippy configuration for Rustify Splitify
+# Run with: cargo clippy --all-targets --all-features
+
+# Cognitive complexity threshold (default is 25)
+cognitive-complexity-threshold = 30
+
+# Lints to allow (suppress warnings)
+# These are intentionally less strict for Leptos projects
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true

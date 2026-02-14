@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 /// Primary button component matching Laravel's styling
+#[must_use]
 #[component]
 pub fn PrimaryButton(
     #[prop(optional, into)] disabled: Signal<bool>,
@@ -19,6 +20,7 @@ pub fn PrimaryButton(
 }
 
 /// Secondary button component
+#[must_use]
 #[component]
 pub fn SecondaryButton(
     #[prop(optional)] disabled: bool,
@@ -37,6 +39,7 @@ pub fn SecondaryButton(
 }
 
 /// Text input component matching Laravel's styling
+#[must_use]
 #[component]
 pub fn TextInput(
     #[prop(optional)] input_type: &'static str,
@@ -60,6 +63,7 @@ pub fn TextInput(
 }
 
 /// Input label component
+#[must_use]
 #[component]
 pub fn InputLabel(#[prop(optional)] for_input: &'static str, children: Children) -> impl IntoView {
     view! {
@@ -73,6 +77,7 @@ pub fn InputLabel(#[prop(optional)] for_input: &'static str, children: Children)
 }
 
 /// Guest layout wrapper (for login/register pages)
+#[must_use]
 #[component]
 pub fn GuestLayout(children: Children) -> impl IntoView {
     view! {
@@ -93,6 +98,7 @@ pub fn GuestLayout(children: Children) -> impl IntoView {
 }
 
 /// Navigation component for authenticated pages
+#[must_use]
 #[component]
 pub fn Navigation(username: String, #[prop(into)] on_logout: Callback<()>) -> impl IntoView {
     let (open, set_open) = signal(false);
@@ -210,6 +216,7 @@ pub fn Navigation(username: String, #[prop(into)] on_logout: Callback<()>) -> im
 }
 
 /// App layout wrapper (for authenticated pages)
+#[must_use]
 #[component]
 pub fn AppLayout(
     #[prop(optional)] header_title: Option<&'static str>,

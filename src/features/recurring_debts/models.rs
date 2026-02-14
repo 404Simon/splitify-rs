@@ -1,9 +1,8 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use time::{Date, OffsetDateTime};
-
 #[cfg(feature = "ssr")]
 use sqlx::FromRow;
+use time::{Date, OffsetDateTime};
 
 /// Frequency enum for recurring debts
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

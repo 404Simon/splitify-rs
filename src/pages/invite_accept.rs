@@ -1,7 +1,7 @@
-use crate::features::auth::UserSession;
-use crate::features::invites::models::InviteWithGroup;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
+
+use crate::features::{auth::UserSession, invites::models::InviteWithGroup};
 
 #[server(GetInviteServer)]
 async fn get_invite_server(uuid: String) -> Result<InviteWithGroup, ServerFnError> {
@@ -14,6 +14,7 @@ async fn accept_invite_server(uuid: String) -> Result<i64, ServerFnError> {
 }
 
 /// Public invite accept page
+#[must_use]
 #[component]
 pub fn InviteAccept() -> impl IntoView {
     let navigate = use_navigate();

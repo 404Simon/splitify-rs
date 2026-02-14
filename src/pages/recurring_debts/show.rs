@@ -1,13 +1,19 @@
-use crate::components::{AppLayout, Navigation};
-use crate::features::auth::{use_logout, UserSession};
-use crate::features::recurring_debts::handlers::{
-    get_generated_instances, get_recurring_debt, get_recurring_debt_shares, DeleteRecurringDebt,
-    GenerateNow, ToggleRecurringDebtActive,
-};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::{
+    components::{AppLayout, Navigation},
+    features::{
+        auth::{use_logout, UserSession},
+        recurring_debts::handlers::{
+            get_generated_instances, get_recurring_debt, get_recurring_debt_shares,
+            DeleteRecurringDebt, GenerateNow, ToggleRecurringDebtActive,
+        },
+    },
+};
+
 /// Show recurring debt details page
+#[must_use]
 #[component]
 pub fn RecurringDebtsShow() -> impl IntoView {
     let user_resource =
