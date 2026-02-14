@@ -5,31 +5,12 @@ on:
 
 jobs:
   build-artifacts:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      BUILD_NAME: "rustify-app-${{ github.ref_name }}-${{ matrix.target }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        build: [linux-x64, linux-x64-musl, windows-x64, macos-x64, macos-arm64]
-        include:
-        - build: linux-x64
-          os: ubuntu-latest
-          target: x86_64-unknown-linux-gnu
-        - build: linux-x64-musl
-          os: ubuntu-latest
-          target: x86_64-unknown-linux-musl
-        - build: windows-x64
-          os: windows-latest
-          target: x86_64-pc-windows-msvc
-        - build: macos-x64
-          os: macos-15-intel
-          target: x86_64-apple-darwin
-        - build: macos-arm64
-          os: macos-latest
-          target: aarch64-apple-darwin
+      BUILD_NAME: "rustify-app-${{ github.ref_name }}-linux-x64"
+      DATABASE_URL: "sqlite:splitify.db"
 
     steps:
     - name: Checkout repository
@@ -37,8 +18,6 @@ jobs:
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@nightly
-      with:
-        targets: ${{ matrix.target }}
 
     - name: Add WASM target
       run: rustup target add wasm32-unknown-unknown
@@ -48,39 +27,44 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Install Node.js dependencies
+      run: npm install
+
     - name: Install sass
       run: npm install -g sass
 
-    - name: Install cargo-leptos
+    - name: Install SQLx CLI
       run: |
-        curl --proto '=https' --tlsv1.3 -LsSf \
-          https://github.com/leptos-rs/cargo-leptos/releases/latest/download/cargo-leptos-installer.sh | sh
+        cargo install sqlx-cli --no-default-features --features sqlite
 
-    - name: Install cross-compilation tools (musl)
-      if: matrix.target == 'x86_64-unknown-linux-musl'
+    - name: Setup database for SQLx compile-time verification
       run: |
-        sudo apt-get update
-        sudo apt-get install -y musl-tools
+        sqlx database create
+        sqlx migrate run
 
     - name: Cache cargo registry and target
       uses: actions/cache@v4
       with:
         path: |
-            ~/.cargo/bin
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-        key: ${{ runner.os }}-${{ matrix.target }}-cargo-leptos-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.target }}-cargo-leptos-
+          ${{ runner.os }}-cargo-
+
+    - name: Install cargo-leptos
+      run: |
+        curl --proto '=https' --tlsv1.3 -LsSf \
+          https://github.com/leptos-rs/cargo-leptos/releases/latest/download/cargo-leptos-installer.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
     - name: Build release with cargo-leptos
       run: |
-        cargo leptos build --release --target ${{ matrix.target }}
+        cargo leptos build --release
 
-    - name: Bundle release (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Bundle release
       shell: bash
       run: |
         mkdir -p "$BUILD_NAME"
@@ -89,7 +73,7 @@ jobs:
         cp README.md LICENSE "$BUILD_NAME/" || true
         
         # Copy server binary
-        cp "target/${{ matrix.target }}/release/rustify-app" "$BUILD_NAME/"
+        cp "target/release/rustify-app" "$BUILD_NAME/"
         chmod +x "$BUILD_NAME/rustify-app"
         
         # Copy site directory (WASM, JS, CSS, assets)
@@ -120,68 +104,14 @@ jobs:
         
         chmod +x "$BUILD_NAME/run.sh"
 
-    - name: Bundle release (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: bash
-      run: |
-        mkdir -p "$BUILD_NAME"
-        
-        # Copy documentation
-        cp README.md LICENSE "$BUILD_NAME/" || true
-        
-        # Copy server binary
-        cp "target/${{ matrix.target }}/release/rustify-app.exe" "$BUILD_NAME/"
-        
-        # Copy site directory (WASM, JS, CSS, assets)
-        cp -r target/site "$BUILD_NAME/"
-        
-        # Copy migrations for database setup
-        cp -r migrations "$BUILD_NAME/"
-        
-        # Create a simple run script
-        cat > "$BUILD_NAME/run.bat" << 'EOF'
-        @echo off
-        setlocal
-        
-        REM Set environment variables
-        if "%LEPTOS_SITE_ROOT%"=="" set LEPTOS_SITE_ROOT=./site
-        if "%DATABASE_URL%"=="" set DATABASE_URL=sqlite:splitify.db
-        if "%RUST_LOG%"=="" set RUST_LOG=info
-        if "%LEPTOS_SITE_ADDR%"=="" set LEPTOS_SITE_ADDR=127.0.0.1:8080
-        
-        echo Starting Rustify App...
-        echo Site root: %LEPTOS_SITE_ROOT%
-        echo Database: %DATABASE_URL%
-        echo Listening on: %LEPTOS_SITE_ADDR%
-        
-        REM Run the server
-        rustify-app.exe
-        EOF
-
-    - name: Create tarball (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Create tarball
       shell: bash
       run: |
         tar -czf "$BUILD_NAME.tar.gz" "$BUILD_NAME"
 
-    - name: Create zip archive (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: bash
-      run: |
-        7z a "$BUILD_NAME.zip" "$BUILD_NAME"
-
-    - name: Upload artifact (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.BUILD_NAME }}
         path: ${{ env.BUILD_NAME }}.tar.gz
-        if-no-files-found: error
-
-    - name: Upload artifact (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ env.BUILD_NAME }}
-        path: ${{ env.BUILD_NAME }}.zip
         if-no-files-found: error
