@@ -101,7 +101,7 @@ pub async fn get_recurring_debts(
         let frequency = debt
             .frequency
             .parse::<Frequency>()
-            .map_err(|e| ServerFnError::new(e))?;
+            .map_err(ServerFnError::new)?;
 
         let start_date = Date::parse(
             &debt.start_date,
@@ -218,7 +218,7 @@ pub async fn get_recurring_debt(
     let frequency = debt
         .frequency
         .parse::<Frequency>()
-        .map_err(|e| ServerFnError::new(e))?;
+        .map_err(ServerFnError::new)?;
 
     let start_date = Date::parse(
         &debt.start_date,
@@ -309,9 +309,7 @@ pub async fn create_recurring_debt(
         return Err(ServerFnError::new("Amount must be greater than 0"));
     }
 
-    let _frequency_enum = frequency
-        .parse::<Frequency>()
-        .map_err(|e| ServerFnError::new(e))?;
+    let _frequency_enum = frequency.parse::<Frequency>().map_err(ServerFnError::new)?;
 
     let start_date_parsed = Date::parse(
         &start_date,
@@ -464,9 +462,7 @@ pub async fn update_recurring_debt(
         return Err(ServerFnError::new("Amount must be greater than 0"));
     }
 
-    let _frequency_enum = frequency
-        .parse::<Frequency>()
-        .map_err(|e| ServerFnError::new(e))?;
+    let _frequency_enum = frequency.parse::<Frequency>().map_err(ServerFnError::new)?;
 
     let end_date_parsed = if let Some(ed) = &end_date {
         let parsed = Date::parse(ed, &time::format_description::well_known::Iso8601::DEFAULT)
@@ -932,7 +928,7 @@ pub async fn generate_now(recurring_debt_id: i64) -> Result<i64, ServerFnError> 
     let frequency = debt
         .frequency
         .parse::<Frequency>()
-        .map_err(|e| ServerFnError::new(e))?;
+        .map_err(ServerFnError::new)?;
 
     let next_generation_date = Date::parse(
         &debt.next_generation_date,

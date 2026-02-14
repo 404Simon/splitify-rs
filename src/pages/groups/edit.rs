@@ -1,4 +1,9 @@
-use crate::components::{AppLayout, Navigation};
+use crate::components::{
+    forms::{
+        CancelButton, ErrorAlert, FormCard, FormField, FormInput, LoadingSpinner, SubmitButton,
+    },
+    AppLayout, Navigation,
+};
 use crate::features::auth::{use_logout, UserSession};
 use crate::features::groups::handlers::{
     get_all_users, get_group, get_group_members, DeleteGroup, UpdateGroup,
@@ -41,6 +46,8 @@ pub fn GroupsEdit() -> impl IntoView {
     let name_signal = RwSignal::new(String::new());
     let selected_members = RwSignal::new(Vec::<i64>::new());
     let show_delete_modal = RwSignal::new(false);
+    let (update_error, set_update_error) = signal(None::<String>);
+    let (delete_error, set_delete_error) = signal(None::<String>);
 
     // Effect to redirect if not authenticated
     let navigate_clone = navigate.clone();
@@ -67,16 +74,24 @@ pub fn GroupsEdit() -> impl IntoView {
     // Effect to redirect after successful update
     let navigate_clone = navigate.clone();
     Effect::new(move |_| {
-        if let Some(Ok(_)) = update_group_action.value().get() {
-            let id = group_id.get();
-            navigate_clone(&format!("/groups/{id}"), Default::default());
+        if let Some(result) = update_group_action.value().get() {
+            match result {
+                Ok(_) => {
+                    let id = group_id.get();
+                    navigate_clone(&format!("/groups/{id}"), Default::default());
+                }
+                Err(e) => set_update_error.set(Some(e.to_string())),
+            }
         }
     });
 
     // Effect to redirect after successful deletion
     Effect::new(move |_| {
-        if let Some(Ok(_)) = delete_group_action.value().get() {
-            navigate("/groups", Default::default());
+        if let Some(result) = delete_group_action.value().get() {
+            match result {
+                Ok(_) => navigate("/groups", Default::default()),
+                Err(e) => set_delete_error.set(Some(e.to_string())),
+            }
         }
     });
 
@@ -97,11 +112,7 @@ pub fn GroupsEdit() -> impl IntoView {
     };
 
     view! {
-        <Suspense fallback=move || view! {
-            <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-            </div>
-        }>
+        <Suspense fallback=move || view! { <LoadingSpinner /> }>
             {move || {
                 match user_resource.get() {
                     Some(Ok(Some(user))) => {
@@ -114,7 +125,7 @@ pub fn GroupsEdit() -> impl IntoView {
                                 <AppLayout>
                                     <div class="py-6">
                                         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                                            <Suspense fallback=move || view! { <div>"Loading..."</div> }>
+                                            <Suspense fallback=move || view! { <LoadingSpinner /> }>
                                                 {move || {
                                                     match group_resource.get() {
                                                         Some(Ok(group)) => {
@@ -130,7 +141,7 @@ pub fn GroupsEdit() -> impl IntoView {
 
                                                         view! {
                                                             <div>
-                                                                // Header
+                                                                // Header with back button
                                                                 <div class="mb-8">
                                                                     <div class="flex items-center gap-2 mb-2">
                                                                         <a href=format!("/groups/{}", group.id) class="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">
@@ -145,30 +156,27 @@ pub fn GroupsEdit() -> impl IntoView {
                                                                 </div>
 
                                                                 // Edit Form
-                                                                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+                                                                <FormCard>
                                                                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">"Group Details"</h2>
 
                                                                     <form on:submit=on_submit class="space-y-6">
-                                                                        <div>
-                                                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                                "Group Name"
-                                                                            </label>
-                                                                            <input
-                                                                                type="text"
-                                                                                required
-                                                                                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                                                        <FormField label="Group Name" for_id="group-name">
+                                                                            <FormInput
+                                                                                id="group-name"
+                                                                                input_type="text"
                                                                                 placeholder="e.g., Roommates"
-                                                                                on:input=move |ev| name_signal.set(event_target_value(&ev))
-                                                                                prop:value=move || name_signal.get()
+                                                                                value=Signal::derive(move || name_signal.get())
+                                                                                on_input=Callback::new(move |val| name_signal.set(val))
+                                                                                required=true
                                                                             />
-                                                                        </div>
+                                                                        </FormField>
 
                                                                         <div>
                                                                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                                                 "Members"
                                                                             </label>
                                                                             <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                                                                                "Select users to add to this group. Hold Ctrl/Cmd to select multiple."
+                                                                                "Select users to add to this group."
                                                                             </p>
 
                                                                             <Suspense fallback=move || view! { <div>"Loading users..."</div> }>
@@ -241,39 +249,21 @@ pub fn GroupsEdit() -> impl IntoView {
                                                                             </Suspense>
                                                                         </div>
 
+                                                                        <ErrorAlert message=update_error />
+
                                                                         <div class="flex flex-col sm:flex-row gap-3">
-                                                                            <button
-                                                                                type="submit"
-                                                                                disabled=move || update_group_action.pending().get()
-                                                                                class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
-                                                                            >
-                                                                                {move || if update_group_action.pending().get() { "Saving..." } else { "Save Changes" }}
-                                                                            </button>
-                                                                            <a
-                                                                                href=format!("/groups/{}", group.id)
-                                                                                class="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-semibold rounded-lg transition-colors text-center"
-                                                                            >
-                                                                                "Cancel"
-                                                                            </a>
+                                                                            <SubmitButton
+                                                                                text="Save Changes"
+                                                                                loading_text="Saving..."
+                                                                                loading=Signal::derive(move || update_group_action.pending().get())
+                                                                            />
+                                                                            <CancelButton href=format!("/groups/{}", group.id) />
                                                                         </div>
                                                                     </form>
-
-                                                                    {move || {
-                                                                        update_group_action.value().get().and_then(|result| {
-                                                                            match result {
-                                                                                Ok(_) => None, // Redirect happens via Effect
-                                                                                Err(e) => Some(view! {
-                                                                                    <div class="mt-4 rounded-md bg-red-50 dark:bg-red-900/30 p-4">
-                                                                                        <p class="text-sm text-red-700 dark:text-red-300">{e.to_string()}</p>
-                                                                                    </div>
-                                                                                }.into_any())
-                                                                            }
-                                                                        })
-                                                                    }}
-                                                                </div>
+                                                                </FormCard>
 
                                                                 // Danger Zone
-                                                                <div class="bg-red-50 dark:bg-red-900/20 rounded-xl shadow-sm border border-red-200 dark:border-red-800 p-6">
+                                                                <div class="mt-6 bg-red-50 dark:bg-red-900/20 rounded-xl shadow-sm border border-red-200 dark:border-red-800 p-6">
                                                                     <h2 class="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">"Danger Zone"</h2>
                                                                     <p class="text-sm text-red-700 dark:text-red-300 mb-4">
                                                                         "Deleting this group will permanently remove all associated data, including expenses, transactions, and debts. This action cannot be undone."
@@ -286,18 +276,7 @@ pub fn GroupsEdit() -> impl IntoView {
                                                                         "Delete Group"
                                                                     </button>
 
-                                                                    {move || {
-                                                                        delete_group_action.value().get().and_then(|result| {
-                                                                            match result {
-                                                                                Ok(_) => None, // Redirect happens via Effect
-                                                                                Err(e) => Some(view! {
-                                                                                    <div class="mt-4 rounded-md bg-red-50 dark:bg-red-900/30 p-4">
-                                                                                        <p class="text-sm text-red-700 dark:text-red-300">{e.to_string()}</p>
-                                                                                    </div>
-                                                                                }.into_any())
-                                                                            }
-                                                                        })
-                                                                    }}
+                                                                    <ErrorAlert message=delete_error />
                                                                 </div>
                                                             </div>
                                                         }.into_any()
@@ -307,7 +286,7 @@ pub fn GroupsEdit() -> impl IntoView {
                                                             <p class="text-sm text-red-700 dark:text-red-300">{e.to_string()}</p>
                                                         </div>
                                                     }.into_any(),
-                                                    None => view! { <div>"Loading..."</div> }.into_any()
+                                                    None => view! { <LoadingSpinner /> }.into_any()
                                                 }
                                             }}
                                         </Suspense>
@@ -317,11 +296,7 @@ pub fn GroupsEdit() -> impl IntoView {
                         </div>
                     }.into_any()
                     },
-                    _ => view! {
-                        <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-                        </div>
-                    }.into_any()
+                    _ => view! { <LoadingSpinner /> }.into_any()
                 }
             }}
         </Suspense>

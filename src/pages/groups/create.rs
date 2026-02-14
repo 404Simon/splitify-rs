@@ -1,4 +1,10 @@
-use crate::components::{AppLayout, Navigation};
+use crate::components::{
+    forms::{
+        CancelButton, ErrorAlert, FormCard, FormField, FormInput, LoadingSpinner, PageHeader,
+        SubmitButton,
+    },
+    AppLayout, Navigation,
+};
 use crate::features::auth::{use_logout, UserSession};
 use crate::features::groups::handlers::CreateGroup;
 use leptos::ev;
@@ -15,6 +21,7 @@ pub fn GroupsCreate() -> impl IntoView {
     let on_logout = use_logout();
 
     let (group_name, set_group_name) = signal(String::new());
+    let (error_message, set_error_message) = signal(None::<String>);
 
     // Clone navigate for use in multiple effects
     let navigate_clone = navigate.clone();
@@ -33,6 +40,16 @@ pub fn GroupsCreate() -> impl IntoView {
         }
     });
 
+    // Effect to handle errors
+    Effect::new(move |_| {
+        if let Some(result) = create_action.value().get() {
+            match result {
+                Ok(_) => set_error_message.set(None),
+                Err(e) => set_error_message.set(Some(e.to_string())),
+            }
+        }
+    });
+
     let on_submit = move |ev: ev::SubmitEvent| {
         ev.prevent_default();
         let name = group_name.get();
@@ -42,11 +59,7 @@ pub fn GroupsCreate() -> impl IntoView {
     };
 
     view! {
-        <Suspense fallback=move || view! {
-            <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-            </div>
-        }>
+        <Suspense fallback=move || view! { <LoadingSpinner /> }>
             {move || {
                 match user_resource.get() {
                     Some(Ok(Some(user))) => view! {
@@ -55,72 +68,42 @@ pub fn GroupsCreate() -> impl IntoView {
                             <AppLayout>
                                 <div class="py-6">
                                     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                                        <div class="mb-8">
-                                            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">"Create New Group"</h1>
-                                            <p class="text-gray-600 dark:text-gray-400 mt-1">"Start a new expense group"</p>
-                                        </div>
+                                        <PageHeader
+                                            title="Create New Group".to_string()
+                                            subtitle="Start a new expense group".to_string()
+                                        />
 
-                                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                                            <form on:submit=on_submit>
-                                                <div class="mb-6">
-                                                    <label
-                                                        for="group-name"
-                                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                                    >
-                                                        "Group Name"
-                                                    </label>
-                                                    <input
-                                                        type="text"
+                                        <FormCard>
+                                            <form on:submit=on_submit class="space-y-6">
+                                                <FormField label="Group Name" for_id="group-name">
+                                                    <FormInput
                                                         id="group-name"
-                                                        name="name"
-                                                        required
-                                                        prop:value=group_name
-                                                        on:input=move |ev| set_group_name.set(event_target_value(&ev))
-                                                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                                                        input_type="text"
                                                         placeholder="e.g., Weekend Trip, Roommates, Project Team"
+                                                        value=Signal::derive(move || group_name.get())
+                                                        on_input=Callback::new(move |val| set_group_name.set(val))
+                                                        required=true
                                                     />
-                                                </div>
+                                                </FormField>
 
-                                                {move || {
-                                                    create_action.value().get().and_then(|result| {
-                                                        match result {
-                                                            Ok(_) => None,
-                                                            Err(e) => Some(view! {
-                                                                <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-4">
-                                                                    <p class="text-sm text-red-700 dark:text-red-300">{e.to_string()}</p>
-                                                                </div>
-                                                            }.into_any())
-                                                        }
-                                                    })
-                                                }}
+                                                <ErrorAlert message=error_message />
 
                                                 <div class="flex gap-3">
-                                                    <button
-                                                        type="submit"
-                                                        disabled=move || create_action.pending().get()
-                                                        class="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
-                                                    >
-                                                        {move || if create_action.pending().get() { "Creating..." } else { "Create Group" }}
-                                                    </button>
-                                                    <a
-                                                        href="/groups"
-                                                        class="px-6 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg transition-all duration-200"
-                                                    >
-                                                        "Cancel"
-                                                    </a>
+                                                    <SubmitButton
+                                                        text="Create Group"
+                                                        loading_text="Creating..."
+                                                        loading=Signal::derive(move || create_action.pending().get())
+                                                    />
+                                                    <CancelButton href="/groups".to_string() />
                                                 </div>
                                             </form>
-                                        </div>
+                                        </FormCard>
                                     </div>
                                 </div>
                             </AppLayout>
                         </div>
                     }.into_any(),
-                    _ => view! {
-                        <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-                        </div>
-                    }.into_any()
+                    _ => view! { <LoadingSpinner /> }.into_any()
                 }
             }}
         </Suspense>

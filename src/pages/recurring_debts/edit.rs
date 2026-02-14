@@ -1,4 +1,7 @@
-use crate::components::{AppLayout, Navigation};
+use crate::components::{
+    AppLayout, ErrorAlert, FormActions, FormCard, FormDateInput, FormField, FormInput,
+    FormNumberInput, FormSelect, LoadingSpinner, MemberCheckboxItem, Navigation, PageHeader,
+};
 use crate::features::auth::{use_logout, UserSession};
 use crate::features::groups::handlers::get_group_members;
 use crate::features::recurring_debts::handlers::{
@@ -134,11 +137,7 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
     };
 
     view! {
-        <Suspense fallback=move || view! {
-            <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-            </div>
-        }>
+        <Suspense fallback=LoadingSpinner>
             {move || {
                 match user_resource.get() {
                     Some(Ok(Some(user))) => view! {
@@ -164,100 +163,66 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
                                                         </div>
                                                     }.into_any(),
                                                     Some(Ok(_debt)) => view! {
-                                                        <div class="mb-8">
-                                                            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                                                                "Edit Recurring Debt"
-                                                            </h1>
-                                                        </div>
+                                                        <PageHeader title="Edit Recurring Debt".to_string() />
 
-                                                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                                                        <FormCard>
                                                             <form on:submit=on_submit class="space-y-6">
-                                                                {move || error_message.get().map(|msg| view! {
-                                                                    <div class="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
-                                                                        <p class="text-sm text-red-700 dark:text-red-300">{msg}</p>
-                                                                    </div>
-                                                                })}
+                                                                <ErrorAlert message=error_message />
 
-                                                                <div>
-                                                                    <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                        "Name"
-                                                                    </label>
-                                                                    <input
-                                                                        type="text"
+                                                                <FormField label="Name" for_id="name">
+                                                                    <FormInput
                                                                         id="name"
-                                                                        required
-                                                                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                        prop:value=move || name.get()
-                                                                        on:input=move |ev| set_name.set(event_target_value(&ev))
+                                                                        required=true
+                                                                        value=Signal::derive(move || name.get())
+                                                                        on_input=Callback::new(move |val| set_name.set(val))
                                                                     />
-                                                                </div>
+                                                                </FormField>
 
-                                                                <div>
-                                                                    <label for="amount" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                        "Amount (€)"
-                                                                    </label>
-                                                                    <input
-                                                                        type="number"
+                                                                <FormField label="Amount (€)" for_id="amount">
+                                                                    <FormNumberInput
                                                                         id="amount"
-                                                                        required
-                                                                        step="0.01"
                                                                         min="0.01"
-                                                                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                        prop:value=move || amount.get()
-                                                                        on:input=move |ev| set_amount.set(event_target_value(&ev))
+                                                                        step="0.01"
+                                                                        required=true
+                                                                        value=Signal::derive(move || amount.get())
+                                                                        on_input=Callback::new(move |val| set_amount.set(val))
                                                                     />
-                                                                </div>
+                                                                </FormField>
 
-                                                                <div>
-                                                                    <label for="frequency" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                        "Frequency"
-                                                                    </label>
-                                                                    <select
+                                                                <FormField label="Frequency" for_id="frequency">
+                                                                    <FormSelect
                                                                         id="frequency"
-                                                                        required
-                                                                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                        prop:value=move || frequency.get()
-                                                                        on:change=move |ev| set_frequency.set(event_target_value(&ev))
+                                                                        required=true
+                                                                        value=Signal::derive(move || frequency.get())
+                                                                        on_change=Callback::new(move |val| set_frequency.set(val))
                                                                     >
                                                                         <option value="daily">"Daily"</option>
                                                                         <option value="weekly">"Weekly"</option>
                                                                         <option value="monthly">"Monthly"</option>
                                                                         <option value="yearly">"Yearly"</option>
-                                                                    </select>
-                                                                </div>
+                                                                    </FormSelect>
+                                                                </FormField>
 
                                                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                                    <div>
-                                                                        <label for="start_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                            "Start Date (Cannot be changed)"
-                                                                        </label>
-                                                                        <input
-                                                                            type="date"
+                                                                    <FormField label="Start Date (Cannot be changed)" for_id="start_date">
+                                                                        <FormDateInput
                                                                             id="start_date"
-                                                                            disabled
-                                                                            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                                                                            prop:value=move || start_date.get()
+                                                                            disabled=true
+                                                                            value=Signal::derive(move || start_date.get())
+                                                                            on_input=Callback::new(move |_val| {})
                                                                         />
-                                                                    </div>
+                                                                    </FormField>
 
-                                                                    <div>
-                                                                        <label for="end_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                            "End Date (Optional)"
-                                                                        </label>
-                                                                        <input
-                                                                            type="date"
+                                                                    <FormField label="End Date (Optional)" for_id="end_date">
+                                                                        <FormDateInput
                                                                             id="end_date"
-                                                                            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                            prop:value=move || end_date.get()
-                                                                            on:input=move |ev| set_end_date.set(event_target_value(&ev))
+                                                                            value=Signal::derive(move || end_date.get())
+                                                                            on_input=Callback::new(move |val| set_end_date.set(val))
                                                                         />
-                                                                    </div>
+                                                                    </FormField>
                                                                 </div>
 
-                                                                <div>
-                                                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                        "Split Between"
-                                                                    </label>
+                                                                <FormField label="Split Between">
                                                                     <Suspense fallback=move || view! { <div>"Loading members..."</div> }>
                                                                         {move || {
                                                                             match members_resource.get() {
@@ -269,32 +234,22 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
                                                                                                 let member_id = member.id;
                                                                                                 let is_checked = selected.contains(&member_id);
                                                                                                 view! {
-                                                                                                    <div class="flex items-center">
-                                                                                                        <input
-                                                                                                            type="checkbox"
-                                                                                                            id=format!("member-{}", member_id)
-                                                                                                            checked=is_checked
-                                                                                                            class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-700"
-                                                                                                            on:change=move |ev| {
-                                                                                                                let checked = event_target_checked(&ev);
-                                                                                                                set_selected_members.update(|members| {
-                                                                                                                    if checked {
-                                                                                                                        if !members.contains(&member_id) {
-                                                                                                                            members.push(member_id);
-                                                                                                                        }
-                                                                                                                    } else {
-                                                                                                                        members.retain(|&id| id != member_id);
+                                                                                                    <MemberCheckboxItem
+                                                                                                        member_id=member_id
+                                                                                                        username=member.username
+                                                                                                        is_checked=is_checked
+                                                                                                        on_change=Callback::new(move |checked| {
+                                                                                                            set_selected_members.update(|members| {
+                                                                                                                if checked {
+                                                                                                                    if !members.contains(&member_id) {
+                                                                                                                        members.push(member_id);
                                                                                                                     }
-                                                                                                                });
-                                                                                                            }
-                                                                                                        />
-                                                                                                        <label
-                                                                                                            for=format!("member-{}", member_id)
-                                                                                                            class="ml-2 text-gray-700 dark:text-gray-300"
-                                                                                                        >
-                                                                                                            {member.username}
-                                                                                                        </label>
-                                                                                                    </div>
+                                                                                                                } else {
+                                                                                                                    members.retain(|&id| id != member_id);
+                                                                                                                }
+                                                                                                            });
+                                                                                                        })
+                                                                                                    />
                                                                                                 }
                                                                                             }).collect_view()}
                                                                                         </div>
@@ -307,25 +262,16 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
                                                                             }
                                                                         }}
                                                                     </Suspense>
-                                                                </div>
+                                                                </FormField>
 
-                                                                <div class="flex gap-3">
-                                                                    <button
-                                                                        type="submit"
-                                                                        disabled=move || update_action.pending().get()
-                                                                        class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
-                                                                    >
-                                                                        {move || if update_action.pending().get() { "Updating..." } else { "Update Recurring Debt" }}
-                                                                    </button>
-                                                                    <a
-                                                                        href=format!("/groups/{}/recurring-debts/{}", group_id.get(), recurring_id.get())
-                                                                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
-                                                                    >
-                                                                        "Cancel"
-                                                                    </a>
-                                                                </div>
+                                                                <FormActions
+                                                                    submit_text="Update Recurring Debt"
+                                                                    loading_text="Updating..."
+                                                                    loading=Signal::derive(move || update_action.pending().get())
+                                                                    cancel_href=format!("/groups/{}/recurring-debts/{}", group_id.get(), recurring_id.get())
+                                                                />
                                                             </form>
-                                                        </div>
+                                                        </FormCard>
                                                     }.into_any(),
                                                     Some(Err(e)) => view! {
                                                         <div class="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
@@ -341,11 +287,7 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
                             </AppLayout>
                         </div>
                     }.into_any(),
-                    _ => view! {
-                        <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-                        </div>
-                    }.into_any()
+                    _ => LoadingSpinner().into_any()
                 }
             }}
         </Suspense>

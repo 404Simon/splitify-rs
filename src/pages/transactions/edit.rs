@@ -1,55 +1,55 @@
-use crate::features::auth::models::UserSession;
+use crate::components::{
+    AppLayout, ErrorAlert, FormActions, FormCard, FormField, FormInput, FormNumberInput,
+    FormSelect, LoadingSpinner, Navigation, PageHeader,
+};
+use crate::features::auth::{models::UserSession, use_logout};
 use crate::features::groups::handlers::get_group_members;
 use crate::features::transactions::handlers::{get_transaction, update_transaction};
-use leptos::either::Either;
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
 #[component]
 pub fn TransactionsEdit() -> impl IntoView {
     let user_resource =
         expect_context::<LocalResource<Result<Option<UserSession>, ServerFnError>>>();
+    let navigate = use_navigate();
+    let on_logout = use_logout();
     let params = use_params_map();
-    let group_id = move || {
+
+    let group_id = Memo::new(move |_| {
         params
             .read()
             .get("id")
             .and_then(|id| id.parse::<i64>().ok())
-    };
-    let transaction_id = move || {
+            .unwrap_or(0)
+    });
+
+    let transaction_id = Memo::new(move |_| {
         params
             .read()
             .get("transaction_id")
             .and_then(|id| id.parse::<i64>().ok())
-    };
+            .unwrap_or(0)
+    });
 
-    let transaction_resource = Resource::new(
-        move || (group_id(), transaction_id()),
-        |(gid, tid)| async move {
-            match (gid, tid) {
-                (Some(group_id), Some(transaction_id)) => {
-                    get_transaction(group_id, transaction_id).await
-                }
-                _ => Err(ServerFnError::ServerError("Invalid IDs".to_string())),
-            }
-        },
-    );
+    let transaction_resource = LocalResource::new(move || {
+        let gid = group_id.get();
+        let tid = transaction_id.get();
+        async move { get_transaction(gid, tid).await }
+    });
 
-    let members_resource = Resource::new(
-        move || group_id(),
-        |id| async move {
-            match id {
-                Some(group_id) => get_group_members(group_id).await,
-                None => Err(ServerFnError::ServerError("Invalid group ID".to_string())),
-            }
-        },
-    );
+    let members_resource = LocalResource::new(move || {
+        let id = group_id.get();
+        async move { get_group_members(id).await }
+    });
 
-    let (recipient_id, set_recipient_id) = signal(0i64);
+    let (recipient_id, set_recipient_id) = signal(String::from("0"));
     let (amount, set_amount) = signal(String::new());
     let (description, set_description) = signal(String::new());
     let (error_message, set_error_message) = signal(Option::<String>::None);
     let (current_user_id, set_current_user_id) = signal(0i64);
+    let (is_submitting, set_is_submitting) = signal(false);
 
     // Set current_user_id when user loads
     Effect::new(move |_| {
@@ -61,29 +61,48 @@ pub fn TransactionsEdit() -> impl IntoView {
     // Initialize form fields when transaction loads
     Effect::new(move |_| {
         if let Some(Ok(transaction)) = transaction_resource.get() {
-            set_recipient_id.set(transaction.recipient_id);
+            set_recipient_id.set(transaction.recipient_id.to_string());
             set_amount.set(transaction.amount.clone());
             set_description.set(transaction.description.clone().unwrap_or_default());
         }
     });
 
-    let navigate = use_navigate();
-    let update_action = Action::new(move |_: &()| {
-        let navigate = navigate.clone();
-        async move {
-            let gid = group_id().unwrap_or(0);
-            let tid = transaction_id().unwrap_or(0);
-            let rid = recipient_id.get();
-            let amt = amount.get();
-            let desc = description.get();
+    // Effect to redirect if not authenticated
+    let navigate_clone = navigate.clone();
+    Effect::new(move |_| {
+        if let Some(Ok(None)) = user_resource.get() {
+            navigate_clone("/login", Default::default());
+        }
+    });
 
-            if rid == 0 {
-                set_error_message.set(Some("Please select a recipient".to_string()));
-                return;
-            }
+    // Clone navigate for use in on_submit
+    let navigate_for_submit = navigate.clone();
+
+    let on_submit = StoredValue::new(move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        set_error_message.set(None);
+        set_is_submitting.set(true);
+
+        let gid = group_id.get();
+        let tid = transaction_id.get();
+        let rid_str = recipient_id.get();
+        let amt = amount.get();
+        let desc = description.get();
+        let nav = navigate_for_submit.clone();
+
+        spawn_local(async move {
+            let rid = match rid_str.parse::<i64>() {
+                Ok(id) if id != 0 => id,
+                _ => {
+                    set_error_message.set(Some("Please select a recipient".to_string()));
+                    set_is_submitting.set(false);
+                    return;
+                }
+            };
 
             if amt.is_empty() {
                 set_error_message.set(Some("Please enter an amount".to_string()));
+                set_is_submitting.set(false);
                 return;
             }
 
@@ -91,195 +110,120 @@ pub fn TransactionsEdit() -> impl IntoView {
 
             match update_transaction(gid, tid, rid, amt, desc_opt).await {
                 Ok(_) => {
-                    navigate(&format!("/groups/{}", gid), Default::default());
+                    nav(&format!("/groups/{}", gid), Default::default());
                 }
                 Err(e) => {
                     set_error_message.set(Some(e.to_string()));
+                    set_is_submitting.set(false);
                 }
             }
-        }
+        });
     });
 
-    let on_submit = move |ev: leptos::ev::SubmitEvent| {
-        ev.prevent_default();
-        update_action.dispatch(());
-    };
-
     view! {
-        <Suspense fallback=move || view! { <p>"Loading..."</p> }>
+        <Suspense fallback=LoadingSpinner>
             {move || {
                 match user_resource.get() {
-                    Some(Ok(Some(_current_user))) => {
-                        Either::Left(
-                            view! {
-                            <Suspense fallback=move || view! { <p>"Loading transaction..."</p> }>
-                                {move || {
-                                    transaction_resource
-                                        .get()
-                                        .map(|trans_result| match trans_result {
-                                                    Ok(_transaction) => {
-                                                        view! {
-                                                            <div class="min-h-screen bg-gray-100 dark:bg-gray-900 py-6">
-                                                                <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-                                                                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                                                                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">"Edit Transaction"</h1>
-                                                                <form on:submit=on_submit class="space-y-4">
-                                                                    {move || {
-                                                                        error_message
-                                                                            .get()
-                                                                            .map(|msg| {
-                                                                                view! {
-                                                                                    <div class="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                                                                        <p class="text-red-800 dark:text-red-200">{msg}</p>
-                                                                                    </div>
-                                                                                }
-                                                                            })
-                                                                    }}
+                    Some(Ok(Some(user))) => view! {
+                        <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
+                            <Navigation username=user.username.clone() on_logout=on_logout />
+                            <AppLayout>
+                                <div class="py-6">
+                                    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                                        <Suspense fallback=move || view! { <div>"Loading..."</div> }>
+                                            {move || {
+                                                match transaction_resource.get() {
+                                                    Some(Ok(_transaction)) => view! {
+                                                        <PageHeader title="Edit Transaction".to_string() />
 
-                                                                    <div>
-                                                                        <label
-                                                                            for="recipient_id"
-                                                                            class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                                                        >
-                                                                            "Recipient"
-                                                                        </label>
-                                                                        <Suspense fallback=move || {
-                                                                            view! { <p>"Loading members..."</p> }
-                                                                        }>
-                                                                            {move || {
-                                                                                members_resource
-                                                                                    .get()
-                                                                                    .map(|members_result| match members_result {
-                                                                                        Ok(members) => {
-                                                                                            let other_members: Vec<_> = members
+                                                        <FormCard>
+                                                            <form on:submit=move |ev| on_submit.with_value(|f| f(ev)) class="space-y-6">
+                                                                <ErrorAlert message=error_message />
+
+                                                                <FormField label="Recipient" for_id="recipient_id">
+                                                                    <Suspense fallback=move || view! { <div>"Loading members..."</div> }>
+                                                                        {move || {
+                                                                            match members_resource.get() {
+                                                                                Some(Ok(members)) => {
+                                                                                    let other_members: Vec<_> = members
+                                                                                        .into_iter()
+                                                                                        .filter(|m| m.id != current_user_id.get())
+                                                                                        .collect();
+                                                                                    view! {
+                                                                                        <FormSelect
+                                                                                            id="recipient_id"
+                                                                                            required=true
+                                                                                            value=Signal::derive(move || recipient_id.get())
+                                                                                            on_change=Callback::new(move |val| set_recipient_id.set(val))
+                                                                                        >
+                                                                                            <option value="0">"Select Recipient"</option>
+                                                                                            {other_members
                                                                                                 .into_iter()
-                                                                                                .filter(|m| m.id != current_user_id.get())
-                                                                                                .collect();
-                                                                                            let current_recipient_id = recipient_id.get();
-                                                                                            view! {
-                                                                                                <select
-                                                                                                    id="recipient_id"
-                                                                                                    on:change=move |ev| {
-                                                                                                        let value = event_target_value(&ev);
-                                                                                                        if let Ok(id) = value.parse::<i64>() {
-                                                                                                            set_recipient_id.set(id);
-                                                                                                        }
+                                                                                                .map(|member| {
+                                                                                                    view! {
+                                                                                                        <option value=member.id.to_string()>
+                                                                                                            {member.username}
+                                                                                                        </option>
                                                                                                     }
-
-                                                                                                    class="mt-1 block w-full border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-700 dark:text-white"
-                                                                                                >
-                                                                                                    <option value="0">"Select Recipient"</option>
-                                                                                                    {other_members
-                                                                                                        .into_iter()
-                                                                                                        .map(|member| {
-                                                                                                            let is_selected = member.id
-                                                                                                                == current_recipient_id;
-                                                                                                            view! {
-                                                                                                                <option
-                                                                                                                    value=member.id
-                                                                                                                    selected=is_selected
-                                                                                                                >
-                                                                                                                    {member.username}
-                                                                                                                </option>
-                                                                                                            }
-                                                                                                        })
-                                                                                                        .collect_view()}
-                                                                                                </select>
-                                                                                            }
-                                                                                            .into_any()
-                                                                                        }
-                                                                                        Err(e) => {
-                                                                                            view! {
-                                                                                                <p class="text-red-600">{e.to_string()}</p>
-                                                                                            }
-                                                                                            .into_any()
-                                                                                        }
-                                                                                    })
-                                                                            }}
-
-                                                                        </Suspense>
-                                                                    </div>
-
-                                                                    <div>
-                                                                        <label
-                                                                            for="amount"
-                                                                            class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                                                        >
-                                                                            "Amount (€)"
-                                                                        </label>
-                                                                        <input
-                                                                            type="number"
-                                                                            id="amount"
-                                                                            step="0.01"
-                                                                            required
-                                                                            on:input=move |ev| {
-                                                                                set_amount.set(event_target_value(&ev));
+                                                                                                })
+                                                                                                .collect_view()}
+                                                                                        </FormSelect>
+                                                                                    }.into_any()
+                                                                                }
+                                                                                Some(Err(e)) => view! {
+                                                                                    <div class="text-red-600 dark:text-red-400">"Error: " {e.to_string()}</div>
+                                                                                }.into_any(),
+                                                                                None => view! { <div>"Loading..."</div> }.into_any()
                                                                             }
+                                                                        }}
+                                                                    </Suspense>
+                                                                </FormField>
 
-                                                                            prop:value=amount
-                                                                            class="mt-1 block w-full border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-700 dark:text-white"
-                                                                        />
-                                                                    </div>
+                                                                <FormField label="Amount (€)" for_id="amount">
+                                                                    <FormNumberInput
+                                                                        id="amount"
+                                                                        min="0.01"
+                                                                        step="0.01"
+                                                                        required=true
+                                                                        value=Signal::derive(move || amount.get())
+                                                                        on_input=Callback::new(move |val| set_amount.set(val))
+                                                                    />
+                                                                </FormField>
 
-                                                                    <div>
-                                                                        <label
-                                                                            for="description"
-                                                                            class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                                                        >
-                                                                            "Description (optional)"
-                                                                        </label>
-                                                                        <input
-                                                                            type="text"
-                                                                            id="description"
-                                                                            on:input=move |ev| {
-                                                                                set_description.set(event_target_value(&ev));
-                                                                            }
+                                                                <FormField label="Description (optional)" for_id="description">
+                                                                    <FormInput
+                                                                        id="description"
+                                                                        value=Signal::derive(move || description.get())
+                                                                        on_input=Callback::new(move |val| set_description.set(val))
+                                                                    />
+                                                                </FormField>
 
-                                                                            prop:value=description
-                                                                            class="mt-1 block w-full border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-700 dark:text-white"
-                                                                        />
-                                                                    </div>
-
-                                                                    <button
-                                                                        type="submit"
-                                                                        class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-                                                                    >
-                                                                        "Update Transaction"
-                                                                    </button>
-                                                                </form>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                        .into_any()
-                                                    }
-                                                    Err(e) => {
-                                                        view! { <p class="text-red-600">{e.to_string()}</p> }
-                                                        .into_any()
-                                                    }
-                                                })
-                                        }}
-
-                                    </Suspense>
-                                },
-                            )
-                    }
-                    Some(Ok(None)) => {
-                        let navigate = use_navigate();
-                        Effect::new(move |_| {
-                            navigate("/login", Default::default());
-                        });
-                        Either::Right(view! { <p>"Redirecting..."</p> })
-                    }
-                    Some(Err(_)) => {
-                        Either::Right(view! { <p>"Error loading user session"</p> })
-                    }
-                    None => {
-                        Either::Right(view! { <p>"Loading..."</p> })
-                    }
+                                                                <FormActions
+                                                                    submit_text="Update Transaction"
+                                                                    loading_text="Updating..."
+                                                                    loading=Signal::derive(move || is_submitting.get())
+                                                                    cancel_href=format!("/groups/{}", group_id.get())
+                                                                />
+                                                            </form>
+                                                        </FormCard>
+                                                    }.into_any(),
+                                                    Some(Err(e)) => view! {
+                                                        <div class="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
+                                                            <p class="text-sm text-red-700 dark:text-red-300">"Error: " {e.to_string()}</p>
+                                                        </div>
+                                                    }.into_any(),
+                                                    None => view! { <div>"Loading..."</div> }.into_any()
+                                                }
+                                            }}
+                                        </Suspense>
+                                    </div>
+                                </div>
+                            </AppLayout>
+                        </div>
+                    }.into_any(),
+                    _ => LoadingSpinner().into_any()
                 }
             }}
-
         </Suspense>
     }
 }

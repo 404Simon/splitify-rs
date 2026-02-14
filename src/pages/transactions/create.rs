@@ -1,37 +1,41 @@
-use crate::features::auth::models::UserSession;
+use crate::components::{
+    AppLayout, ErrorAlert, FormActions, FormCard, FormField, FormInput, FormNumberInput,
+    FormSelect, LoadingSpinner, Navigation, PageHeader,
+};
+use crate::features::auth::{models::UserSession, use_logout};
 use crate::features::groups::handlers::get_group_members;
 use crate::features::transactions::handlers::create_transaction;
-use leptos::either::Either;
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
 #[component]
 pub fn TransactionsCreate() -> impl IntoView {
     let user_resource =
         expect_context::<LocalResource<Result<Option<UserSession>, ServerFnError>>>();
+    let navigate = use_navigate();
+    let on_logout = use_logout();
     let params = use_params_map();
-    let group_id = move || {
+
+    let group_id = Memo::new(move |_| {
         params
             .read()
             .get("id")
             .and_then(|id| id.parse::<i64>().ok())
-    };
+            .unwrap_or(0)
+    });
 
-    let members_resource = Resource::new(
-        move || group_id(),
-        |id| async move {
-            match id {
-                Some(group_id) => get_group_members(group_id).await,
-                None => Err(ServerFnError::ServerError("Invalid group ID".to_string())),
-            }
-        },
-    );
+    let members_resource = LocalResource::new(move || {
+        let id = group_id.get();
+        async move { get_group_members(id).await }
+    });
 
-    let (recipient_id, set_recipient_id) = signal(0i64);
+    let (recipient_id, set_recipient_id) = signal(String::from("0"));
     let (amount, set_amount) = signal(String::new());
     let (description, set_description) = signal(String::new());
     let (error_message, set_error_message) = signal(Option::<String>::None);
     let (current_user_id, set_current_user_id) = signal(0i64);
+    let (is_submitting, set_is_submitting) = signal(false);
 
     // Set current_user_id when user loads
     Effect::new(move |_| {
@@ -40,22 +44,41 @@ pub fn TransactionsCreate() -> impl IntoView {
         }
     });
 
-    let navigate = use_navigate();
-    let create_action = Action::new(move |_: &()| {
-        let navigate = navigate.clone();
-        async move {
-            let gid = group_id().unwrap_or(0);
-            let rid = recipient_id.get();
-            let amt = amount.get();
-            let desc = description.get();
+    // Effect to redirect if not authenticated
+    let navigate_clone = navigate.clone();
+    Effect::new(move |_| {
+        if let Some(Ok(None)) = user_resource.get() {
+            navigate_clone("/login", Default::default());
+        }
+    });
 
-            if rid == 0 {
-                set_error_message.set(Some("Please select a recipient".to_string()));
-                return;
-            }
+    // Clone navigate for use in on_submit
+    let navigate_for_submit = navigate.clone();
+
+    let on_submit = StoredValue::new(move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        set_error_message.set(None);
+        set_is_submitting.set(true);
+
+        let gid = group_id.get();
+        let rid_str = recipient_id.get();
+        let amt = amount.get();
+        let desc = description.get();
+        let nav = navigate_for_submit.clone();
+
+        spawn_local(async move {
+            let rid = match rid_str.parse::<i64>() {
+                Ok(id) if id != 0 => id,
+                _ => {
+                    set_error_message.set(Some("Please select a recipient".to_string()));
+                    set_is_submitting.set(false);
+                    return;
+                }
+            };
 
             if amt.is_empty() {
                 set_error_message.set(Some("Please enter an amount".to_string()));
+                set_is_submitting.set(false);
                 return;
             }
 
@@ -63,184 +86,108 @@ pub fn TransactionsCreate() -> impl IntoView {
 
             match create_transaction(gid, rid, amt, desc_opt).await {
                 Ok(_) => {
-                    navigate(&format!("/groups/{}", gid), Default::default());
+                    nav(&format!("/groups/{}", gid), Default::default());
                 }
                 Err(e) => {
                     set_error_message.set(Some(e.to_string()));
+                    set_is_submitting.set(false);
                 }
             }
-        }
+        });
     });
 
-    let on_submit = move |ev: leptos::ev::SubmitEvent| {
-        ev.prevent_default();
-        create_action.dispatch(());
-    };
-
     view! {
-        <Suspense fallback=move || view! { <p>"Loading..."</p> }>
+        <Suspense fallback=LoadingSpinner>
             {move || {
                 match user_resource.get() {
-                    Some(Ok(Some(_current_user))) => {
-                        Either::Left(
-                            view! {
-                            <Suspense fallback=move || view! { <p>"Loading group..."</p> }>
-                                {move || {
-                                    group_id()
-                                        .map(|_gid| {
-                                                    view! {
-                                                        <div class="min-h-screen bg-gray-100 dark:bg-gray-900 py-6">
-                                                            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-                                                                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                                                                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">"Add Transaction"</h1>
-                                                            <form on:submit=on_submit class="space-y-4">
-                                                                {move || {
-                                                                    error_message
-                                                                        .get()
-                                                                        .map(|msg| {
-                                                                            view! {
-                                                                                <div class="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                                                                    <p class="text-red-800 dark:text-red-200">{msg}</p>
-                                                                                </div>
-                                                                            }
-                                                                        })
-                                                                }}
+                    Some(Ok(Some(user))) => view! {
+                        <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
+                            <Navigation username=user.username.clone() on_logout=on_logout />
+                            <AppLayout>
+                                <div class="py-6">
+                                    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                                        <PageHeader title="Add Transaction".to_string() />
 
-                                                                <div>
-                                                                    <label
-                                                                        for="recipient_id"
-                                                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                                                    >
-                                                                        "Recipient"
-                                                                    </label>
-                                                                    <Suspense fallback=move || {
-                                                                        view! { <p>"Loading members..."</p> }
-                                                                    }>
-                                                                        {move || {
-                                                                            members_resource
-                                                                                .get()
-                                                                                .map(|members_result| match members_result {
-                                                                                     Ok(members) => {
-                                                                                        let other_members: Vec<_> = members
-                                                                                            .into_iter()
-                                                                                            .filter(|m| m.id != current_user_id.get())
-                                                                                            .collect();
-                                                                                        view! {
-                                                                                            <select
-                                                                                                id="recipient_id"
-                                                                                                on:change=move |ev| {
-                                                                                                    let value = event_target_value(&ev);
-                                                                                                    if let Ok(id) = value.parse::<i64>() {
-                                                                                                        set_recipient_id.set(id);
-                                                                                                    }
-                                                                                                }
+                                        <FormCard>
+                                            <form on:submit=move |ev| on_submit.with_value(|f| f(ev)) class="space-y-6">
+                                                <ErrorAlert message=error_message />
 
-                                                                                                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                                            >
-                                                                                                <option value="0">"Select Recipient"</option>
-                                                                                                {other_members
-                                                                                                    .into_iter()
-                                                                                                    .map(|member| {
-                                                                                                        view! {
-                                                                                                            <option value=member.id>
-                                                                                                                {member.username}
-                                                                                                            </option>
-                                                                                                        }
-                                                                                                    })
-                                                                                                    .collect_view()}
-                                                                                            </select>
-                                                                                        }
-                                                                                        .into_any()
-                                                                                    }
-                                                                                    Err(e) => {
-                                                                                        view! {
-                                                                                            <p class="text-red-600">{e.to_string()}</p>
-                                                                                        }
-                                                                                        .into_any()
+                                                <FormField label="Recipient" for_id="recipient_id">
+                                                    <Suspense fallback=move || view! { <div>"Loading members..."</div> }>
+                                                        {move || {
+                                                            match members_resource.get() {
+                                                                Some(Ok(members)) => {
+                                                                    let other_members: Vec<_> = members
+                                                                        .into_iter()
+                                                                        .filter(|m| m.id != current_user_id.get())
+                                                                        .collect();
+                                                                    view! {
+                                                                        <FormSelect
+                                                                            id="recipient_id"
+                                                                            required=true
+                                                                            value=Signal::derive(move || recipient_id.get())
+                                                                            on_change=Callback::new(move |val| set_recipient_id.set(val))
+                                                                        >
+                                                                            <option value="0">"Select Recipient"</option>
+                                                                            {other_members
+                                                                                .into_iter()
+                                                                                .map(|member| {
+                                                                                    view! {
+                                                                                        <option value=member.id.to_string()>
+                                                                                            {member.username}
+                                                                                        </option>
                                                                                     }
                                                                                 })
-                                                                        }}
+                                                                                .collect_view()}
+                                                                        </FormSelect>
+                                                                    }.into_any()
+                                                                }
+                                                                Some(Err(e)) => view! {
+                                                                    <div class="text-red-600 dark:text-red-400">"Error: " {e.to_string()}</div>
+                                                                }.into_any(),
+                                                                None => view! { <div>"Loading..."</div> }.into_any()
+                                                            }
+                                                        }}
+                                                    </Suspense>
+                                                </FormField>
 
-                                                                    </Suspense>
-                                                                </div>
+                                                <FormField label="Amount (€)" for_id="amount">
+                                                    <FormNumberInput
+                                                        id="amount"
+                                                        placeholder="0.00"
+                                                        min="0.01"
+                                                        step="0.01"
+                                                        required=true
+                                                        value=Signal::derive(move || amount.get())
+                                                        on_input=Callback::new(move |val| set_amount.set(val))
+                                                    />
+                                                </FormField>
 
-                                                                <div>
-                                                                    <label
-                                                                        for="amount"
-                                                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                                                    >
-                                                                        "Amount (€)"
-                                                                    </label>
-                                                                    <input
-                                                                        type="number"
-                                                                        id="amount"
-                                                                        step="0.01"
-                                                                        min="0.01"
-                                                                        required
-                                                                        placeholder="0.00"
-                                                                        on:input=move |ev| {
-                                                                            set_amount.set(event_target_value(&ev));
-                                                                        }
+                                                <FormField label="Description (optional)" for_id="description">
+                                                    <FormInput
+                                                        id="description"
+                                                        placeholder="e.g., Dinner payment"
+                                                        value=Signal::derive(move || description.get())
+                                                        on_input=Callback::new(move |val| set_description.set(val))
+                                                    />
+                                                </FormField>
 
-                                                                        prop:value=amount
-                                                                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                    />
-                                                                </div>
-
-                                                                <div>
-                                                                    <label
-                                                                        for="description"
-                                                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                                                    >
-                                                                        "Description (optional)"
-                                                                    </label>
-                                                                    <input
-                                                                        type="text"
-                                                                        id="description"
-                                                                        placeholder="e.g., Dinner payment"
-                                                                        on:input=move |ev| {
-                                                                            set_description.set(event_target_value(&ev));
-                                                                        }
-
-                                                                        prop:value=description
-                                                                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                    />
-                                                                </div>
-
-                                                                <button
-                                                                    type="submit"
-                                                                    class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
-                                                                >
-                                                                    "Add Transaction"
-                                                                </button>
-                                                            </form>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                })
-                                        }}
-
-                                    </Suspense>
-                                },
-                            )
-                    }
-                    Some(Ok(None)) => {
-                        let navigate = use_navigate();
-                        Effect::new(move |_| {
-                            navigate("/login", Default::default());
-                        });
-                        Either::Right(view! { <p>"Redirecting..."</p> })
-                    }
-                    Some(Err(_)) => {
-                        Either::Right(view! { <p>"Error loading user session"</p> })
-                    }
-                    None => {
-                        Either::Right(view! { <p>"Loading..."</p> })
-                    }
+                                                <FormActions
+                                                    submit_text="Add Transaction"
+                                                    loading_text="Adding..."
+                                                    loading=Signal::derive(move || is_submitting.get())
+                                                    cancel_href=format!("/groups/{}", group_id.get())
+                                                />
+                                            </form>
+                                        </FormCard>
+                                    </div>
+                                </div>
+                            </AppLayout>
+                        </div>
+                    }.into_any(),
+                    _ => LoadingSpinner().into_any()
                 }
             }}
-
         </Suspense>
     }
 }
