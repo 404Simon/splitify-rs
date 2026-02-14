@@ -1,0 +1,25 @@
+services:
+  splitify-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: splitify
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:/app/data/splitify.db
+      - RUST_LOG=info
+      - LEPTOS_SITE_ADDR=0.0.0.0:8080
+      - LEPTOS_SITE_ROOT=/app/site
+      # Optional: Configure recurring debts cron schedule
+      # Default: "0 0 6 * * *" (daily at 6:00 AM)
+      # - RECURRING_DEBTS_CRON=0 0 6 * * *
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
