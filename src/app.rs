@@ -1,7 +1,8 @@
 use crate::features::auth::get_user;
 use crate::pages::{
     GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
-    LoginPage, RegisterPage,
+    LoginPage, RegisterPage, SharedDebtsCreate, SharedDebtsEdit, TransactionsCreate,
+    TransactionsEdit,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -81,6 +82,10 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/groups/:id") view=GroupsShow/>
                     <Route path=path!("/groups/:id/edit") view=GroupsEdit/>
                     <Route path=path!("/groups/:id/invites") view=GroupsInvites/>
+                    <Route path=path!("/groups/:id/debts/create") view=SharedDebtsCreate/>
+                    <Route path=path!("/groups/:id/debts/:debt_id/edit") view=SharedDebtsEdit/>
+                    <Route path=path!("/groups/:id/transactions/create") view=TransactionsCreate/>
+                    <Route path=path!("/groups/:id/transactions/:transaction_id/edit") view=TransactionsEdit/>
                     <Route path=path!("/invite/:uuid") view=InviteAccept/>
                 </Routes>
             </main>
