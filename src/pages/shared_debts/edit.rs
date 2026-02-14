@@ -1,5 +1,8 @@
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
+use leptos_router::{
+    components::A,
+    hooks::{use_navigate, use_params_map},
+};
 
 use crate::{
     components::{
@@ -136,6 +139,13 @@ pub fn SharedDebtsEdit() -> impl IntoView {
                                                         </div>
                                                     }.into_any(),
                                                     Some(Ok(_debt)) => view! {
+                                                        <A href=format!("/groups/{}", group_id.get()) attr:class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-sm inline-flex items-center mb-3">
+                                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                                                            </svg>
+                                                            "Back to Group"
+                                                        </A>
+
                                                         <PageHeader title="Edit Debt".to_string() />
 
                                                         <FormCard>

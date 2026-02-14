@@ -1,5 +1,8 @@
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
+use leptos_router::{
+    components::A,
+    hooks::{use_navigate, use_params_map},
+};
 
 use crate::{
     components::{AppLayout, Navigation},
@@ -117,18 +120,18 @@ pub fn GroupsInvites() -> impl IntoView {
 
                                                         view! {
                                                             <div>
+                                                                <A href=format!("/groups/{}", group.id) attr:class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-sm inline-flex items-center mb-3">
+                                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                                                                    </svg>
+                                                                    "Back to Group"
+                                                                </A>
+
                                                                 // Header
                                                                 <div class="mb-8">
-                                                                    <div class="flex items-center gap-2 mb-2">
-                                                                        <a href=format!("/groups/{}", group.id) class="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">
-                                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                                                                            </svg>
-                                                                        </a>
-                                                                        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                                                                            "Manage Invites for " {group.name.clone()}
-                                                                        </h1>
-                                                                    </div>
+                                                                    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                                                                        "Manage Invites for " {group.name.clone()}
+                                                                    </h1>
                                                                 </div>
 
                                                                 // Create Invite Form

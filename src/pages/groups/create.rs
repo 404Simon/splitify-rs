@@ -1,5 +1,5 @@
 use leptos::{ev, prelude::*};
-use leptos_router::hooks::use_navigate;
+use leptos_router::{components::A, hooks::use_navigate};
 
 use crate::{
     components::{
@@ -73,6 +73,13 @@ pub fn GroupsCreate() -> impl IntoView {
                             <AppLayout>
                                 <div class="py-6">
                                     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                                        <A href="/groups" attr:class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-sm inline-flex items-center mb-3">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                                            </svg>
+                                            "Back to Groups"
+                                        </A>
+
                                         <PageHeader
                                             title="Create New Group".to_string()
                                             subtitle="Start a new expense group".to_string()
