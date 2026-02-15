@@ -2,6 +2,9 @@ services:
   splitify-app:
     container_name: splitify
     image: ghcr.io/404simon/splitify-rs:latest
+    # Run as host user to avoid permission issues with bind-mounted volumes
+    # Set UID/GID in .env file or they default to 1000:1000
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "8080:8080"
     volumes:
@@ -15,6 +18,14 @@ services:
       # Default: "0 0 6 * * *" (daily at 6:00 AM)
       # - RECURRING_DEBTS_CRON=0 0 6 * * *
     restart: unless-stopped
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
       interval: 30s

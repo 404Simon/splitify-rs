@@ -22,16 +22,13 @@ jobs:
     - name: Add WASM target
       run: rustup target add wasm32-unknown-unknown
 
-    - name: Install Node.js (for sass and tailwind)
+    - name: Install Node.js (for tailwind)
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
     - name: Install Node.js dependencies
       run: npm install
-
-    - name: Install sass
-      run: npm install -g sass
 
     - name: Install SQLx CLI
       run: |

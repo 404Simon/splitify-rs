@@ -1,9 +1,15 @@
-#!/bin/sh
+#!/busybox/sh
 set -e
 
 DB_URL="${DATABASE_URL:-sqlite:/app/data/splitify.db}"
 DB_PATH=$(echo "$DB_URL" | sed 's|^sqlite:||')
 DB_DIR=$(dirname "$DB_PATH")
+
+if ! mkdir -p "$DB_DIR" 2>/dev/null; then
+    echo "ERROR: Cannot create data directory: $DB_DIR"
+    echo "Please ensure the volume is mounted with proper permissions"
+    exit 1
+fi
 
 if [ -f "$DB_PATH" ]; then
     echo "Database file found - will run migrations to ensure schema is up-to-date"
@@ -21,15 +27,15 @@ cd /app
 
 if [ "$DB_EXISTS" = false ]; then
     echo "Creating new database..."
-    sqlx database create
+    /app/sqlx database create
     echo "Database created successfully"
     
     echo "Running initial migrations..."
-    sqlx migrate run
+    /app/sqlx migrate run
     echo "Initial migrations completed"
 else
     echo "Database already exists, checking for new migrations..."
-    sqlx migrate run
+    /app/sqlx migrate run
     echo "Migrations up to date"
 fi
 

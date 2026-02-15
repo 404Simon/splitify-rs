@@ -1,30 +1,37 @@
 # =============================================================================
-# Stage 1: Builder - Build the Leptos SSR application
+# Stage 1: Tool Cache - Build/install cargo tools once and cache them
+# =============================================================================
+FROM rustlang/rust:nightly-alpine AS tool-cache
+
+RUN apk add --no-cache libc-dev openssl-dev sqlite-dev perl make
+
+# Install cargo tools in a dedicated stage for better caching
+RUN cargo install sqlx-cli --no-default-features --features sqlite --locked
+RUN cargo install cargo-leptos --locked
+
+# =============================================================================
+# Stage 2: Builder - Build the Leptos SSR application
 # =============================================================================
 FROM rustlang/rust:nightly-alpine AS builder
 
 # Install build dependencies
 RUN apk update && \
-    apk add --no-cache \
-    bash \
-    curl \
-    npm \
-    libc-dev \
-    binaryen \
-    openssl-dev \
-    pkgconfig \
-    sqlite \
-    sqlite-dev
+  apk add --no-cache \
+  bash \
+  curl \
+  npm \
+  libc-dev \
+  binaryen \
+  openssl-dev \
+  pkgconfig \
+  sqlite \
+  sqlite-dev \
+  musl-dev
 
-# Install sass for stylesheet compilation
-RUN npm install -g sass
-
-# Install sqlx-cli for preparing query metadata
-RUN cargo install sqlx-cli --no-default-features --features sqlite
-
-# Install cargo-leptos for building Leptos applications
-RUN curl --proto '=https' --tlsv1.3 -LsSf \
-    https://github.com/leptos-rs/cargo-leptos/releases/latest/download/cargo-leptos-installer.sh | sh
+# Copy pre-built tools from cache stage
+COPY --from=tool-cache /usr/local/cargo/bin/sqlx /usr/local/cargo/bin/sqlx
+COPY --from=tool-cache /usr/local/cargo/bin/cargo-sqlx /usr/local/cargo/bin/cargo-sqlx
+COPY --from=tool-cache /usr/local/cargo/bin/cargo-leptos /usr/local/cargo/bin/cargo-leptos
 
 # Add WASM target for client-side hydration
 RUN rustup target add wasm32-unknown-unknown
@@ -32,83 +39,74 @@ RUN rustup target add wasm32-unknown-unknown
 # Set working directory
 WORKDIR /work
 
-# Copy dependency manifests first for better layer caching
+# Copy dependency manifests first and create dummy src for dependency caching
 COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && \
+  echo "fn main() {}" > src/main.rs && \
+  echo "pub fn dummy() {}" > src/lib.rs
+RUN cargo build --release --features ssr && rm -rf src target/release/deps/rustify_app*
 
-# Copy source code and assets
+# Now copy real source code
 COPY src ./src
 COPY style ./style
 COPY public ./public
 COPY migrations ./migrations
 
-# Generate SQLx offline query data on-the-fly
-# This ensures queries are validated against the actual schema
 ENV DATABASE_URL=sqlite:build.db
 RUN sqlx database create && \
-    sqlx migrate run && \
-    cargo sqlx prepare --workspace -- --lib --features ssr && \
-    rm build.db*
+  sqlx migrate run && \
+  cargo sqlx prepare --workspace -- --lib --features ssr && \
+  rm build.db*
 
 # Set SQLx to offline mode for the actual build
 ENV SQLX_OFFLINE=true
 
-# Build the application in release mode
-# - Server binary compiled with SSR features
-# - Client WASM bundle compiled with hydrate features
-# - CSS processed through Tailwind and optimized
+# Build the application in release mode with optimizations
+ENV CARGO_PROFILE_RELEASE_STRIP=symbols
+ENV CARGO_PROFILE_RELEASE_LTO=true
+ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 RUN cargo leptos build --release -vv
 
 # =============================================================================
-# Stage 2: Runner - Minimal runtime image
+# Stage 3: Runtime Dependencies - Build minimal sqlx for runtime
 # =============================================================================
-FROM rustlang/rust:nightly-alpine AS runner
+FROM rustlang/rust:nightly-alpine AS runtime-tools
 
-# Install runtime dependencies including SQLite for sqlx-cli
-RUN apk add --no-cache \
-    ca-certificates \
-    libgcc \
-    sqlite \
-    sqlite-dev
+RUN apk add --no-cache libc-dev openssl-dev sqlite-dev musl-dev
 
-# Create app user for security
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# Build sqlx statically for distroless
+RUN cargo install sqlx-cli --no-default-features --features sqlite --locked \
+  --target x86_64-unknown-linux-musl || \
+  cargo install sqlx-cli --no-default-features --features sqlite --locked
 
-# Install sqlx-cli for database migrations
-# It will be installed to /usr/local/cargo/bin/sqlx which is already in PATH
-RUN cargo install sqlx-cli --no-default-features --features sqlite
+# =============================================================================
+# Stage 4: Runner - Distroless minimal runtime image
+# =============================================================================
+# :debug needed for busybox shell for entrypoint script
+FROM gcr.io/distroless/cc-debian12:debug
 
 WORKDIR /app
 
-# Copy built artifacts from builder stage
-COPY --from=builder /work/target/release/rustify-app /app/
+COPY --from=builder --chmod=755 /work/target/release/rustify-app /app/rustify-app
+COPY --from=builder --chmod=644 /work/Cargo.toml /app/Cargo.toml
+
 COPY --from=builder /work/target/site /app/site
-COPY --from=builder /work/Cargo.toml /app/
 COPY --from=builder /work/migrations /app/migrations
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+COPY --from=runtime-tools --chmod=755 /usr/local/cargo/bin/sqlx /app/sqlx
 
-# Create directory for SQLite database
-RUN mkdir -p /app/data && \
-    chown -R appuser:appuser /app
+COPY --chmod=755 docker-entrypoint.sh /app/docker-entrypoint.sh
 
-# Switch to non-root user
-USER appuser
-
-# Configure environment variables
 ENV RUST_LOG="info"
 ENV LEPTOS_SITE_ADDR="0.0.0.0:8080"
-ENV LEPTOS_SITE_ROOT="./site"
+ENV LEPTOS_SITE_ROOT="/app/site"
 ENV DATABASE_URL="sqlite:/app/data/splitify.db"
 
-# Expose application port
 EXPOSE 8080
 
-# Health check endpoint (assumes /api/health exists or adjust as needed)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
+VOLUME ["/app/data"]
 
-# Use entrypoint script to handle database setup
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["/busybox/wget", "-q", "-O", "/dev/null", "http://localhost:8080/"]
+
+ENTRYPOINT ["/busybox/sh", "/app/docker-entrypoint.sh"]
