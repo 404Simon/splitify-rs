@@ -16,7 +16,7 @@ pub fn TransactionsSection(
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">"Transactions"</h2>
                 <a
-                    href=format!("/groups/{}/transactions/create", group_id.get())
+                    href=move || format!("/groups/{}/transactions/create", group_id.get())
                     class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors inline-flex items-center"
                 >
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,7 +43,7 @@ pub fn TransactionsSection(
                             <div class="space-y-4">
                                 {transactions.into_iter().map(|transaction| {
                                     let trans_id = transaction.id;
-                                    let gid = group_id.get();
+                                    let gid = group_id.get_untracked();
                                     let is_payer = transaction.payer_id == user_id;
                                     view! {
                                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-100 dark:border-gray-600">

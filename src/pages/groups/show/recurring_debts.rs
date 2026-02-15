@@ -17,7 +17,7 @@ pub fn RecurringDebtsSection(
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">"Recurring Debts"</h2>
                 <a
-                    href=format!("/groups/{}/recurring-debts/create", group_id.get())
+                    href=move || format!("/groups/{}/recurring-debts/create", group_id.get())
                     class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors inline-flex items-center"
                 >
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -44,7 +44,7 @@ pub fn RecurringDebtsSection(
                             <div class="space-y-4">
                                 {debts.into_iter().map(|debt| {
                                     let recurring_id = debt.id;
-                                    let gid = group_id.get();
+                                    let gid = group_id.get_untracked();
                                     view! {
                                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-100 dark:border-gray-600">
                                             <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">

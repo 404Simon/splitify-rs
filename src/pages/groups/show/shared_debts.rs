@@ -18,7 +18,7 @@ pub fn SharedDebtsSection(
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">"Shared Debts"</h2>
                 <a
-                    href=format!("/groups/{}/debts/create", group_id.get())
+                    href=move || format!("/groups/{}/debts/create", group_id.get())
                     class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors inline-flex items-center"
                 >
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,10 +60,13 @@ pub fn SharedDebtsSection(
                                                         {debt.created_at.date().to_string()}
                                                     </p>
                                                 </div>
-                                                {debt.is_creator.then(|| view! {
+                                                {debt.is_creator.then(|| {
+                                                    let gid = group_id.get_untracked();
+                                                    let debt_id = debt.id;
+                                                    view! {
                                                     <div class="flex flex-wrap gap-2">
                                                         <a
-                                                            href=format!("/groups/{}/debts/{}/edit", group_id.get(), debt.id)
+                                                            href=format!("/groups/{}/debts/{}/edit", gid, debt_id)
                                                             class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center"
                                                         >
                                                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,7 +88,7 @@ pub fn SharedDebtsSection(
                                                             "Delete"
                                                         </button>
                                                     </div>
-                                                })}
+                                                }})}
                                             </div>
                                             <div class="mt-3">
                                                 <Suspense fallback=move || view! { <div class="text-xs text-gray-500">"Loading shares..."</div> }>

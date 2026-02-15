@@ -142,6 +142,9 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
         });
     };
 
+    let gid = group_id.get_untracked();
+    let rid = recurring_id.get_untracked();
+
     view! {
         <Suspense fallback=LoadingSpinner>
             {move || {
@@ -161,7 +164,7 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
                                                                 "You do not have permission to edit this recurring debt."
                                                             </p>
                                                             <a
-                                                                href=format!("/groups/{}", group_id.get())
+                                                                href=format!("/groups/{}", gid)
                                                                 class="text-sm text-red-700 dark:text-red-300 underline mt-2 inline-block"
                                                             >
                                                                 "Back to Group"
@@ -274,7 +277,7 @@ pub fn RecurringDebtsEdit() -> impl IntoView {
                                                                     submit_text="Update Recurring Debt"
                                                                     loading_text="Updating..."
                                                                     loading=Signal::derive(move || update_action.pending().get())
-                                                                    cancel_href=format!("/groups/{}/recurring-debts/{}", group_id.get(), recurring_id.get())
+                                                                    cancel_href=format!("/groups/{}/recurring-debts/{}", gid, rid)
                                                                 />
                                                             </form>
                                                         </FormCard>

@@ -110,6 +110,9 @@ pub fn RecurringDebtsShow() -> impl IntoView {
         }
     };
 
+    let gid = group_id.get_untracked();
+    let rid = recurring_id.get_untracked();
+
     view! {
         <Suspense fallback=move || view! {
             <div class="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -145,7 +148,7 @@ pub fn RecurringDebtsShow() -> impl IntoView {
                                                                 </span>
                                                             </div>
                                                             <a
-                                                                href=format!("/groups/{}", group_id.get())
+                                                                href=format!("/groups/{}", gid)
                                                                 class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 text-sm mt-2 inline-block"
                                                             >
                                                                 "← Back to Group"
@@ -304,7 +307,7 @@ pub fn RecurringDebtsShow() -> impl IntoView {
                                                                             }}
                                                                         </button>
                                                                         <a
-                                                                            href=format!("/groups/{}/recurring-debts/{}/edit", group_id.get(), recurring_id.get())
+                                                                            href=format!("/groups/{}/recurring-debts/{}/edit", gid, rid)
                                                                             class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
                                                                         >
                                                                             "Edit"

@@ -145,22 +145,24 @@ pub fn GroupsShow() -> impl IntoView {
                                                                         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{group.name.clone()}</h1>
                                                                         <p class="text-gray-600 dark:text-gray-400 mt-1">"Group Details"</p>
                                                                     </div>
-                                                                    {is_admin.then(|| view! {
-                                                                        <div class="flex gap-2">
-                                                                            <a
-                                                                                href=format!("/groups/{}/invites", group_id.get())
-                                                                                class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium transition-colors"
-                                                                            >
-                                                                                "Manage Invites"
-                                                                            </a>
-                                                                            <a
-                                                                                href=format!("/groups/{}/edit", group_id.get())
-                                                                                class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
-                                                                            >
-                                                                                "Edit Group"
-                                                                            </a>
-                                                                        </div>
-                                                                    })}
+                                                    {is_admin.then(|| {
+                                                        let gid = group_id.get_untracked();
+                                                        view! {
+                                                        <div class="flex gap-2">
+                                                            <a
+                                                                href=format!("/groups/{}/invites", gid)
+                                                                class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium transition-colors"
+                                                            >
+                                                                "Manage Invites"
+                                                            </a>
+                                                            <a
+                                                                href=format!("/groups/{}/edit", gid)
+                                                                class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
+                                                            >
+                                                                "Edit Group"
+                                                            </a>
+                                                        </div>
+                                                    }})}
                                                                 </div>
 
                                                                 // Component sections

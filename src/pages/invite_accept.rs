@@ -32,7 +32,7 @@ pub fn InviteAccept() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(Ok(None)) = user_resource.get() {
             // User is not authenticated, redirect to login with return URL
-            let current_path = format!("/invite/{}", uuid.get());
+            let current_path = format!("/invite/{}", uuid.get_untracked());
             let encoded_path = urlencoding::encode(&current_path);
             navigate_for_auth(
                 &format!("/login?redirect_to={}", encoded_path),
@@ -102,7 +102,7 @@ pub fn InviteAccept() -> impl IntoView {
                                             </div>
                                         }.into_any()
                                     } else {
-                                        let current_path = format!("/invite/{}", uuid.get());
+                                        let current_path = format!("/invite/{}", uuid.get_untracked());
                                         let encoded_path = urlencoding::encode(&current_path);
                                         view! {
                                             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">

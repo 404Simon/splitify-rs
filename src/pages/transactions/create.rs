@@ -104,6 +104,8 @@ pub fn TransactionsCreate() -> impl IntoView {
         });
     });
 
+    let gid = group_id.get_untracked();
+
     view! {
         <Suspense fallback=LoadingSpinner>
             {move || {
@@ -114,7 +116,7 @@ pub fn TransactionsCreate() -> impl IntoView {
                             <AppLayout>
                                 <div class="py-6">
                                     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                                        <A href=format!("/groups/{}", group_id.get()) attr:class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-sm inline-flex items-center mb-3">
+                                        <A href=format!("/groups/{}", gid) attr:class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-sm inline-flex items-center mb-3">
                                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                                             </svg>
@@ -191,7 +193,7 @@ pub fn TransactionsCreate() -> impl IntoView {
                                                     submit_text="Add Transaction"
                                                     loading_text="Adding..."
                                                     loading=Signal::derive(move || is_submitting.get())
-                                                    cancel_href=format!("/groups/{}", group_id.get())
+                                                    cancel_href=format!("/groups/{}", gid)
                                                 />
                                             </form>
                                         </FormCard>

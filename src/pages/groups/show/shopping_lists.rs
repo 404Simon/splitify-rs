@@ -77,10 +77,12 @@ pub fn ShoppingListsSection(group_id: Memo<i64>) -> impl IntoView {
 #[component]
 fn ShoppingListCard(list: ShoppingListSummary, group_id: Memo<i64>) -> impl IntoView {
     let progress = list.completion_percentage();
+    let list_id = list.id;
+    let gid = group_id.get_untracked();
 
     view! {
         <a
-            href=format!("/groups/{}/shopping-lists/{}", group_id.get(), list.id)
+            href=format!("/groups/{}/shopping-lists/{}", gid, list_id)
             class="block bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-md transition-all p-4"
         >
             <div class="flex items-start justify-between mb-2">
