@@ -49,7 +49,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         // Meta tags for better SEO and appearance
-        <Meta name="description" content="Rustify Splitify - Split expenses with friends, the Rust way. Fast, secure, and reliable expense tracking."/>
+        <Meta name="description" content="Splitify - Split expenses with friends, the Rust way. Fast, secure, and reliable expense tracking."/>
         <Meta name="theme-color" content="#4F46E5"/>
         <Meta name="mobile-web-app-capable" content="yes"/>
         <Meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -67,7 +67,7 @@ pub fn App() -> impl IntoView {
         <Stylesheet id="leptos" href="/pkg/rustify-app.css"/>
 
         // Document title
-        <Title text="Rustify Splitify - Split Expenses with Friends"/>
+        <Title text="Splitify - Split Expenses with Friends"/>
 
         // Main router and content
         <Router>

@@ -1,4 +1,4 @@
-# Clippy configuration for Rustify Splitify
+# Clippy configuration for Splitify
 # Run with: cargo clippy --all-targets --all-features
 
 # Cognitive complexity threshold (default is 25)

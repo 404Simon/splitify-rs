@@ -1,9 +1,7 @@
 services:
   splitify-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: splitify
+    image: ghcr.io/404simon/splitify-rs:latest
     ports:
       - "8080:8080"
     volumes:
