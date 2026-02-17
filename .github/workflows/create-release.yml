@@ -56,34 +56,34 @@ jobs:
           CLEAN_VERSION=$(echo "${{ inputs.version }}" | sed 's/^v//')
           echo "Updating version to $CLEAN_VERSION"
           cargo set-version "$CLEAN_VERSION"
-          
+
       - name: Verify version was updated
         run: |
           CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
           EXPECTED_VERSION=$(echo "${{ inputs.version }}" | sed 's/^v//')
-          
+
           if [ "$CARGO_VERSION" != "$EXPECTED_VERSION" ]; then
             echo "Error: Version mismatch. Expected $EXPECTED_VERSION but got $CARGO_VERSION"
             exit 1
           fi
-          
+
           echo "Version successfully updated to $CARGO_VERSION"
 
       - name: Commit and tag
         run: |
           CLEAN_VERSION=$(echo "${{ inputs.version }}" | sed 's/^v//')
-          
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git add Cargo.toml Cargo.lock
-          git commit -m "chore: release v$CLEAN_VERSION"
-          
+          git commit -m "chore: release v$CLEAN_VERSION [no ci]"
+
           git tag "${{ inputs.version }}"
-          
+
           git push
           git push origin "${{ inputs.version }}"
-          
+
           echo "## Version Bump Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
@@ -100,24 +100,27 @@ jobs:
             --generate-notes \
             --title "Release ${{ inputs.version }}" \
             --notes "This release was automatically created by GitHub Actions.
-          
+
           ## Installation
+
+          ### Docker Compose
           
+          Download the \`docker-compose.yml\` and the \`.env.example\`, rename it to \`.env\`, create a \`data\` directory and start it.
+
+          \`\`\`bash
+          docker compose up -d
+          \`\`\`
+
           ### Docker
+
           \`\`\`bash
           docker pull ghcr.io/${{ github.repository }}:${{ inputs.version }}
           docker run -p 8080:8080 -v ./data:/app/data ghcr.io/${{ github.repository }}:${{ inputs.version }}
           \`\`\`
-          
+
           ### Binary
-          Download the appropriate binary for your platform from the assets below, extract it, and run:
+
+          Download the binary assets below, extract it, and run:
           \`\`\`bash
-          # Linux/macOS
           ./run.sh
-          
-          # Windows
-          run.bat
           \`\`\`
-          
-          ## What's Changed
-          See the full changelog below for all changes included in this release."
