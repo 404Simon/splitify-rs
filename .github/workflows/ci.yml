@@ -64,8 +64,9 @@ jobs:
             cargo install sqlx-cli --no-default-features --features sqlite
           fi
 
-      - name: Run migrations
+      - name: Create database and run migrations
         run: |
+          sqlx database create
           sqlx migrate run
 
       - name: Run Clippy
@@ -120,8 +121,9 @@ jobs:
             cargo install sqlx-cli --no-default-features --features sqlite
           fi
 
-      - name: Run migrations
+      - name: Create database and run migrations
         run: |
+          sqlx database create
           sqlx migrate run
 
       - name: Run tests
@@ -190,8 +192,9 @@ jobs:
             cargo install sqlx-cli --no-default-features --features sqlite
           fi
 
-      - name: Run migrations
+      - name: Create database and run migrations
         run: |
+          sqlx database create
           sqlx migrate run
 
       - name: Build with cargo-leptos
