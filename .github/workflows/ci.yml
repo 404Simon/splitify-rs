@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    # Run on every push to any branch
   pull_request:
 
 env:
@@ -23,46 +22,18 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
 
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-git-
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-lint-
-
-      - name: Cache SQLx CLI
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/sqlx
-          key: ${{ runner.os }}-sqlx-cli
-          restore-keys: |
-            ${{ runner.os }}-sqlx-cli
-
       - name: Install SQLx CLI
-        run: |
-          if ! command -v sqlx &> /dev/null; then
-            cargo install sqlx-cli --no-default-features --features sqlite
-          fi
+        run: cargo install sqlx-cli --no-default-features --features sqlite --locked
+        env:
+          CARGO_TARGET_DIR: /tmp/sqlx-build
 
       - name: Create database and run migrations
         run: |
@@ -83,43 +54,15 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-git-
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-test-
-
-      - name: Cache SQLx CLI
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/sqlx
-          key: ${{ runner.os }}-sqlx-cli
-          restore-keys: |
-            ${{ runner.os }}-sqlx-cli
+          cache-on-failure: true
 
       - name: Install SQLx CLI
-        run: |
-          if ! command -v sqlx &> /dev/null; then
-            cargo install sqlx-cli --no-default-features --features sqlite
-          fi
+        run: cargo install sqlx-cli --no-default-features --features sqlite --locked
+        env:
+          CARGO_TARGET_DIR: /tmp/sqlx-build
 
       - name: Create database and run migrations
         run: |
@@ -140,57 +83,18 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-git-
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-
-
-      - name: Cache cargo-leptos
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-leptos
-          key: ${{ runner.os }}-cargo-leptos
-          restore-keys: |
-            ${{ runner.os }}-cargo-leptos
+          cache-on-failure: true
 
       - name: Install cargo-leptos
-        run: |
-          if ! command -v cargo-leptos &> /dev/null; then
-            cargo install cargo-leptos
-          fi
-
-      - name: Cache SQLx CLI
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/sqlx
-          key: ${{ runner.os }}-sqlx-cli
-          restore-keys: |
-            ${{ runner.os }}-sqlx-cli
+        run: cargo install cargo-leptos --locked
 
       - name: Install SQLx CLI
-        run: |
-          if ! command -v sqlx &> /dev/null; then
-            cargo install sqlx-cli --no-default-features --features sqlite
-          fi
+        run: cargo install sqlx-cli --no-default-features --features sqlite --locked
+        env:
+          CARGO_TARGET_DIR: /tmp/sqlx-build
 
       - name: Create database and run migrations
         run: |
@@ -218,19 +122,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo-audit
-        uses: actions/cache@v4
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/bin/cargo-audit
-          key: ${{ runner.os }}-cargo-audit
-          restore-keys: |
-            ${{ runner.os }}-cargo-audit
+          cache-on-failure: true
 
       - name: Install cargo-audit
-        run: |
-          if ! command -v cargo-audit &> /dev/null; then
-            cargo install cargo-audit
-          fi
+        run: cargo install cargo-audit --locked
 
       - name: Run security audit
         run: cargo audit
@@ -257,19 +155,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo-outdated
-        uses: actions/cache@v4
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/bin/cargo-outdated
-          key: ${{ runner.os }}-cargo-outdated
-          restore-keys: |
-            ${{ runner.os }}-cargo-outdated
+          cache-on-failure: true
 
       - name: Install cargo-outdated
-        run: |
-          if ! command -v cargo-outdated &> /dev/null; then
-            cargo install cargo-outdated
-          fi
+        run: cargo install cargo-outdated --locked
 
       - name: Check for outdated dependencies
         run: cargo outdated --exit-code 1
