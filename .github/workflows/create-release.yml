@@ -32,7 +32,23 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Get current month for cache key
+        id: month
+        run: echo "month=$(date +%Y-%m)" >> $GITHUB_OUTPUT
+
+      - name: Cache cargo-edit
+        id: cache-cargo-edit
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/cargo-set-version
+            ~/.cargo/bin/cargo-add
+            ~/.cargo/bin/cargo-rm
+            ~/.cargo/bin/cargo-upgrade
+          key: ${{ runner.os }}-cargo-edit-${{ steps.month.outputs.month }}
+
       - name: Install cargo-edit
+        if: steps.cache-cargo-edit.outputs.cache-hit != 'true'
         run: cargo install cargo-edit
 
       - name: Bump version in Cargo.toml
