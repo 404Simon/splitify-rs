@@ -18,7 +18,7 @@ async fn main() {
         app::*,
         db::init_db,
         features::{
-            recurring_debts::handlers::process_due_recurring_debts,
+            recurring_debts::handlers::scheduler::process_due_recurring_debts_internal,
             shopping_lists::{create_broadcaster, EventBroadcaster},
         },
     };
@@ -93,10 +93,8 @@ async fn main() {
         Box::pin(async move {
             tracing::info!("Running scheduled recurring debts generation");
 
-            // Provide the pool context for the server function
-            provide_context(pool_clone.clone());
-
-            match process_due_recurring_debts().await {
+            // Call the internal function directly - no need for provide_context
+            match process_due_recurring_debts_internal(pool_clone).await {
                 Ok(count) => {
                     tracing::info!(count = count, "Successfully generated recurring debts");
                 }

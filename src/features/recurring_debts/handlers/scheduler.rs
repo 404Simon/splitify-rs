@@ -1,6 +1,3 @@
-//! Background job for processing due recurring debts
-
-use leptos::prelude::*;
 #[cfg(feature = "ssr")]
 use rust_decimal::Decimal;
 #[cfg(feature = "ssr")]
@@ -11,16 +8,13 @@ use crate::features::recurring_debts::models::{Frequency, RecurringDebt};
 #[cfg(feature = "ssr")]
 use crate::features::recurring_debts::utils::{calculate_next_occurrence, should_generate};
 
-/// Server function: Process all due recurring debts (background job)
-#[server(ProcessDueRecurringDebts)]
-pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
-    use sqlx::SqlitePool;
-
-    let pool = expect_context::<SqlitePool>();
+#[cfg(feature = "ssr")]
+pub async fn process_due_recurring_debts_internal(
+    pool: sqlx::SqlitePool,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     let today = time::OffsetDateTime::now_utc().date();
     let today_str = today.to_string();
 
-    // Get all active recurring debts that are due for generation
     let debts = sqlx::query!(
         r#"
         SELECT 
@@ -43,8 +37,7 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
         today_str
     )
     .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    .await?;
 
     let mut generated_count = 0;
 
@@ -103,36 +96,36 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
             }
         };
 
-        // Double-check eligibility using should_generate
+        let amount = match debt_row.amount.parse::<Decimal>() {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!(
+                    "Error parsing amount for recurring debt {}: {}",
+                    debt_row.id, e
+                );
+                continue;
+            }
+        };
+
         let recurring_debt = RecurringDebt {
             id: debt_row.id,
             group_id: debt_row.group_id,
             created_by: debt_row.created_by,
             name: debt_row.name.clone(),
-            amount: match debt_row.amount.parse::<Decimal>() {
-                Ok(a) => a,
-                Err(e) => {
-                    eprintln!(
-                        "Error parsing amount for recurring debt {}: {}",
-                        debt_row.id, e
-                    );
-                    continue;
-                }
-            },
+            amount,
             frequency: frequency.clone(),
             start_date,
             end_date,
             next_generation_date,
             is_active: debt_row.is_active,
-            created_at: time::OffsetDateTime::now_utc(), // Placeholder
-            updated_at: time::OffsetDateTime::now_utc(), // Placeholder
+            created_at: time::OffsetDateTime::now_utc(),
+            updated_at: time::OffsetDateTime::now_utc(),
         };
 
         if !should_generate(&recurring_debt, today) {
             continue;
         }
 
-        // Get members
         let members = match sqlx::query!(
             r#"
             SELECT user_id as "user_id!"
@@ -161,10 +154,8 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
             continue;
         }
 
-        // Calculate new next_generation_date
         let new_next_date = calculate_next_occurrence(next_generation_date, &frequency);
 
-        // Begin transaction for this debt generation
         let mut tx = match pool.begin().await {
             Ok(t) => t,
             Err(e) => {
@@ -176,7 +167,6 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
             }
         };
 
-        // Create SharedDebt
         let shared_debt_id = match sqlx::query!(
             r#"
             INSERT INTO shared_debts (group_id, created_by, name, amount, recurring_debt_id)
@@ -201,7 +191,6 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
             }
         };
 
-        // Insert members into shared_debt_user
         for member_id in member_ids {
             if let Err(e) = sqlx::query!(
                 "INSERT INTO shared_debt_user (shared_debt_id, user_id) VALUES (?, ?)",
@@ -215,11 +204,9 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
                     "Error inserting member {} for shared debt {}: {}",
                     member_id, shared_debt_id, e
                 );
-                // Continue anyway - partial data is better than nothing
             }
         }
 
-        // Update next_generation_date
         let new_next_date_str = new_next_date.to_string();
         if let Err(e) = sqlx::query!(
             "UPDATE recurring_debts SET next_generation_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -230,11 +217,9 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
         .await
         {
             eprintln!("Error updating next_generation_date for recurring debt {}: {}", debt_row.id, e);
-            // Don't commit if we can't update the next generation date
             continue;
         }
 
-        // Commit transaction
         if let Err(e) = tx.commit().await {
             eprintln!(
                 "Error committing transaction for recurring debt {}: {}",
@@ -244,10 +229,10 @@ pub async fn process_due_recurring_debts() -> Result<usize, ServerFnError> {
         }
 
         generated_count += 1;
-        leptos::logging::log!(
-            "Generated shared debt {} from recurring debt {}",
-            shared_debt_id,
-            debt_row.id
+        tracing::info!(
+            shared_debt_id = shared_debt_id,
+            recurring_debt_id = debt_row.id,
+            "Generated shared debt from recurring debt"
         );
     }
 
