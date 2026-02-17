@@ -5,7 +5,7 @@ use leptos_router::{
 };
 
 use crate::{
-    components::{AppLayout, Navigation},
+    components::{AppLayout, FormField, FormInput, Navigation},
     features::{
         auth::{use_logout, UserSession},
         groups::handlers::get_group,
@@ -47,8 +47,8 @@ pub fn GroupsInvites() -> impl IntoView {
     });
 
     // Form signals
-    let name_signal = RwSignal::new(String::new());
-    let duration_days_signal = RwSignal::new(7_i64);
+    let (name_signal, set_name_signal) = signal(String::new());
+    let (duration_days_signal, set_duration_days_signal) = signal(String::from("7"));
     let is_reusable_signal = RwSignal::new(false);
 
     // Effect to redirect if not authenticated
@@ -63,8 +63,8 @@ pub fn GroupsInvites() -> impl IntoView {
         if let Some(Ok(_)) = create_invite_action.value().get() {
             invites_resource.refetch();
             // Reset form
-            name_signal.set(String::new());
-            duration_days_signal.set(7);
+            set_name_signal.set(String::new());
+            set_duration_days_signal.set(String::from("7"));
             is_reusable_signal.set(false);
         }
     });
@@ -78,6 +78,9 @@ pub fn GroupsInvites() -> impl IntoView {
 
     let on_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
+
+        let duration = duration_days_signal.get().parse::<i64>().unwrap_or(7);
+
         create_invite_action.dispatch(CreateInvite {
             group_id: group_id.get(),
             name: if name_signal.get().is_empty() {
@@ -85,7 +88,7 @@ pub fn GroupsInvites() -> impl IntoView {
             } else {
                 Some(name_signal.get())
             },
-            duration_days: duration_days_signal.get(),
+            duration_days: duration,
             is_reusable: is_reusable_signal.get(),
         });
     };
@@ -139,45 +142,32 @@ pub fn GroupsInvites() -> impl IntoView {
                                                                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">"Create New Invite"</h2>
 
                                                                     <form on:submit=on_submit class="space-y-4">
-                                                                        <div>
-                                                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                                "Invite Name (Optional)"
-                                                                            </label>
-                                                                            <input
-                                                                                type="text"
-                                                                                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                                                        <FormField label="Invite Name (Optional)" for_id="invite_name">
+                                                                            <FormInput
+                                                                                id="invite_name"
                                                                                 placeholder="e.g., For John"
-                                                                                on:input=move |ev| name_signal.set(event_target_value(&ev))
-                                                                                prop:value=move || name_signal.get()
+                                                                                value=Signal::derive(move || name_signal.get())
+                                                                                on_input=Callback::new(move |val| set_name_signal.set(val))
                                                                             />
-                                                                        </div>
+                                                                        </FormField>
 
-                                                                        <div>
-                                                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                                                "Duration (Days)"
-                                                                            </label>
-                                                                            <input
-                                                                                type="number"
-                                                                                min="1"
-                                                                                max="30"
-                                                                                required
-                                                                                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                                                                                on:input=move |ev| {
-                                                                                    if let Ok(val) = event_target_value(&ev).parse::<i64>() {
-                                                                                        duration_days_signal.set(val);
-                                                                                    }
-                                                                                }
-                                                                                prop:value=move || duration_days_signal.get()
+                                                                        <FormField label="Duration (Days)" for_id="duration_days">
+                                                                            <FormInput
+                                                                                id="duration_days"
+                                                                                input_type="number"
+                                                                                required=true
+                                                                                value=Signal::derive(move || duration_days_signal.get())
+                                                                                on_input=Callback::new(move |val| set_duration_days_signal.set(val))
                                                                             />
-                                                                        </div>
+                                                                        </FormField>
 
                                                                         <div class="flex items-center">
                                                                             <input
                                                                                 type="checkbox"
                                                                                 id="is_reusable"
-                                                                                class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                                                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-700"
+                                                                                checked=is_reusable_signal.get_untracked()
                                                                                 on:change=move |ev| is_reusable_signal.set(event_target_checked(&ev))
-                                                                                prop:checked=move || is_reusable_signal.get()
                                                                             />
                                                                             <label for="is_reusable" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
                                                                                 "Reusable (can be used multiple times)"

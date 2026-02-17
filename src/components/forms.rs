@@ -64,7 +64,7 @@ pub fn FormInput(
             disabled=disabled
             placeholder=placeholder
             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-600 dark:disabled:text-gray-400"
-            prop:value=move || value.get()
+            value=value.get_untracked()
             on:input=move |ev| on_input.run(event_target_value(&ev))
         />
     }
@@ -109,7 +109,7 @@ pub fn FormNumberInput(
             min=min
             placeholder=placeholder
             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-600 dark:disabled:text-gray-400"
-            prop:value=move || value.get()
+            value=value.get_untracked()
             on:input=move |ev| on_input.run(event_target_value(&ev))
         />
     }
@@ -142,7 +142,7 @@ pub fn FormDateInput(
             required=required
             disabled=disabled
             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-600 dark:disabled:text-gray-400"
-            prop:value=move || value.get()
+            value=value.get_untracked()
             on:input=move |ev| on_input.run(event_target_value(&ev))
         />
     }

@@ -160,7 +160,7 @@ pub fn SharedDebtsEdit() -> impl IntoView {
                                                                         id="name"
                                                                         required
                                                                         class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                                                                        prop:value=move || name.get()
+                                                                        value=name.get_untracked()
                                                                         on:input=move |ev| set_name.set(event_target_value(&ev))
                                                                     />
                                                                 </FormField>
