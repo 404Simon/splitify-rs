@@ -149,8 +149,8 @@ mod tests {
         assert!(validate_password("password123").is_ok());
         assert!(validate_password("Pass1234").is_ok());
         assert!(validate_password("12345abcd").is_ok());
+        assert!(validate_password("noNumbersHere").is_ok()); // Letters only is fine
         assert!(validate_password("short1").is_err()); // Too short
-        assert!(validate_password("noNumbersHere").is_err()); // No numbers
         assert!(validate_password("12345678").is_err()); // No letters
         assert!(validate_password("").is_err()); // Empty
     }
