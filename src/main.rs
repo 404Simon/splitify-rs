@@ -65,8 +65,34 @@ async fn main() {
 
     tracing::debug!("Session store migrated successfully");
 
+    // Session cookie configuration (configurable for development)
+    // SESSION_SAME_SITE: "strict" (default), "lax", or "none"
+    // SESSION_SECURE: "true" (default for production), "false" (for local HTTP
+    // development)
+    let same_site = std::env::var("SESSION_SAME_SITE")
+        .unwrap_or_else(|_| "strict".to_string())
+        .to_lowercase();
+    let same_site = match same_site.as_str() {
+        "lax" => tower_sessions::cookie::SameSite::Lax,
+        "none" => tower_sessions::cookie::SameSite::None,
+        _ => tower_sessions::cookie::SameSite::Strict, // Default: secure
+    };
+
+    let secure = std::env::var("SESSION_SECURE")
+        .unwrap_or_else(|_| "true".to_string())
+        .to_lowercase()
+        != "false";
+
+    tracing::info!(
+        same_site = ?same_site,
+        secure = secure,
+        "Configuring session cookies"
+    );
+
     let session_layer = SessionManagerLayer::new(session_store)
-        .with_expiry(Expiry::OnInactivity(Duration::weeks(1))); // 7 days
+        .with_expiry(Expiry::OnInactivity(Duration::weeks(1))) // 7 days
+        .with_same_site(same_site)
+        .with_secure(secure);
 
     let conf = get_configuration(None).expect(
         "FATAL: Failed to load Leptos configuration - check Cargo.toml [package.metadata.leptos]",
