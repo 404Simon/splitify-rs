@@ -2529,6 +2529,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "console_error_panic_hook",
+ "dotenvy",
  "futures",
  "leptos",
  "leptos_axum",

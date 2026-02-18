@@ -31,6 +31,11 @@ async fn main() {
     use tower_sessions_sqlx_store::SqliteStore;
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+    if let Err(e) = dotenvy::dotenv() {
+        // Silently ignore errors (file may not exist)
+        eprintln!("Note: .env file not loaded: {}", e);
+    }
+
     // Initialize structured logging
     tracing_subscriber::registry()
         .with(
