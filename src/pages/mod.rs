@@ -2,6 +2,7 @@ pub mod groups;
 pub mod home;
 pub mod invite_accept;
 pub mod login;
+pub mod offline;
 pub mod recurring_debts;
 pub mod register;
 pub mod shared_debts;
@@ -13,6 +14,7 @@ pub use groups::{GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsSho
 pub use home::HomePage;
 pub use invite_accept::InviteAccept;
 pub use login::LoginPage;
+pub use offline::OfflinePage;
 pub use recurring_debts::{RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow};
 pub use register::RegisterPage;
 pub use shared_debts::{SharedDebtsCreate, SharedDebtsEdit};

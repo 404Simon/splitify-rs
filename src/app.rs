@@ -9,9 +9,9 @@ use crate::{
     features::auth::get_user,
     pages::{
         GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
-        LoginPage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow, RegisterPage,
-        SharedDebtsCreate, SharedDebtsEdit, ShoppingListCreate, ShoppingListEdit, ShoppingListShow,
-        TransactionsCreate, TransactionsEdit,
+        LoginPage, OfflinePage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow,
+        RegisterPage, SharedDebtsCreate, SharedDebtsEdit, ShoppingListCreate, ShoppingListEdit,
+        ShoppingListShow, TransactionsCreate, TransactionsEdit,
     },
 };
 
@@ -29,6 +29,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             </head>
             <body class="font-sans antialiased dark:bg-gray-900">
                 <App/>
+                <script src="/pwa-register.js" defer></script>
             </body>
         </html>
     }
@@ -51,13 +52,20 @@ pub fn App() -> impl IntoView {
         // Meta tags for better SEO and appearance
         <Meta name="description" content="Splitify - Split expenses with friends, the Rust way. Fast, secure, and reliable expense tracking."/>
         <Meta name="theme-color" content="#4F46E5"/>
+
+        // PWA Configuration
+        <Link rel="manifest" href="/manifest.json"/>
         <Meta name="mobile-web-app-capable" content="yes"/>
+        <Meta name="apple-mobile-web-app-capable" content="yes"/>
         <Meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+        <Meta name="apple-mobile-web-app-title" content="Splitify"/>
 
         // Favicon and app icons
         <Link rel="icon" type_="image/svg+xml" href="/favicon.svg"/>
         <Link rel="icon" sizes="192x192" href="/favicon-192x192.png"/>
         <Link rel="apple-touch-icon" href="/favicon-192x192.png"/>
+        <Link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png"/>
+        <Link rel="apple-touch-icon" sizes="512x512" href="/favicon-512x512.png"/>
 
         // Google Fonts - Figtree font family
         <Link rel="preconnect" href="https://fonts.bunny.net"/>
@@ -89,6 +97,7 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("login") view=LoginPage/>
                     <Route path=StaticSegment("register") view=RegisterPage/>
+                    <Route path=StaticSegment("offline") view=OfflinePage/>
                     <Route path=StaticSegment("groups") view=GroupsIndex/>
                     <Route path=path!("/groups/create") view=GroupsCreate/>
                     <Route path=path!("/groups/:id") view=GroupsShow/>
