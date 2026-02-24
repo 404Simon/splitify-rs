@@ -123,4 +123,4 @@ jobs:
           Download the binary assets below, extract it, and run:
           \`\`\`bash
           ./run.sh
-          \`\`\`
+          \`\`\`"

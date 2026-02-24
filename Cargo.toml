@@ -1,6 +1,6 @@
 [package]
 name = "rustify-app"
-version = "0.1.8"
+version = "0.1.10"
 edition = "2021"
 
 [lib]
@@ -58,6 +58,9 @@ regex = { version = "1", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 
+# Environment variable loading
+dotenvy = { version = "0.15", optional = true }
+
 [features]
 hydrate = [
     "leptos/hydrate",
@@ -84,6 +87,7 @@ ssr = [
     "dep:tokio-stream",
     "dep:futures",
     "dep:serde_json",
+    "dep:dotenvy",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
