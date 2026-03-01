@@ -107,7 +107,7 @@ jobs:
         tar -czf "$BUILD_NAME.tar.gz" "$BUILD_NAME"
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ env.BUILD_NAME }}
         path: ${{ env.BUILD_NAME }}.tar.gz
