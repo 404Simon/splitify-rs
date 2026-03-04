@@ -2532,6 +2532,7 @@ dependencies = [
  "urlencoding",
  "uuid",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
