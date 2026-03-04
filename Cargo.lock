@@ -2501,7 +2501,7 @@ dependencies = [
 
 [[package]]
 name = "rustify-app"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "axum",
  "bcrypt",
