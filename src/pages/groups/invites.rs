@@ -221,6 +221,9 @@ pub fn GroupsInvites() -> impl IntoView {
                                                                                                     let invite_uuid_for_delete = invite.uuid.clone();
                                                                                                     let group_id_val = group_id.get();
 
+                                                                                                    // Signal to track copied state for this invite
+                                                                                                    let (copied, _set_copied) = signal(false);
+
                                                                                                     view! {
                                                                                                         <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                                                                                                             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
@@ -246,13 +249,57 @@ pub fn GroupsInvites() -> impl IntoView {
                                                                                                                     <p class="text-sm text-gray-600 dark:text-gray-400">
                                                                                                                         "Expires: " {invite.expiration_date}
                                                                                                                     </p>
-                                                                                                    <div class="mt-2 bg-gray-50 dark:bg-gray-700 rounded p-2">
-                                                                                                        <code class="text-xs text-gray-800 dark:text-gray-200 break-all select-all">
-                                                                                                            {window().location().origin().map(|origin| format!("{}/invite/{}", origin, invite_uuid)).unwrap_or_else(|_| format!("/invite/{}", invite_uuid))}
-                                                                                                        </code>
-                                                                                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                                                                            "Click text to select, then Ctrl+C to copy"
-                                                                                                        </p>
+                                                                                                    <div class="mt-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+                                                                                                        <div class="flex items-center gap-3">
+                                                                                                            <div class="flex-1 min-w-0">
+                                                                                                                <code class="text-xs text-gray-800 dark:text-gray-200 break-all block">
+                                                                                                                    {window().location().origin().map(|origin| format!("{}/invite/{}", origin, invite_uuid.clone())).unwrap_or_else(|_| format!("/invite/{}", invite_uuid.clone()))}
+                                                                                                                </code>
+                                                                                                            </div>
+                                                                                                            <button
+                                                                                                                class=move || if copied.get() {
+                                                                                                                    "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-gray-500 text-white text-xs font-medium rounded-lg shadow-sm cursor-default"
+                                                                                                                } else {
+                                                                                                                    "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-medium rounded-lg transition-colors shadow-sm hover:shadow-md"
+                                                                                                                }
+                                                                                                                on:click=move |_| {
+                                                                                                                    #[cfg(target_arch = "wasm32")]
+                                                                                                                    {
+                                                                                                                        if let Some(window) = web_sys::window() {
+                                                                                                                            let full_url = window.location().origin()
+                                                                                                                                .map(|origin| format!("{}/invite/{}", origin, invite_uuid.clone()))
+                                                                                                                                .unwrap_or_else(|_| format!("/invite/{}", invite_uuid.clone()));
+                                                                                                                            let navigator = window.navigator();
+                                                                                                                            let clipboard = navigator.clipboard();
+                                                                                                                            let _ = clipboard.write_text(&full_url);
+
+                                                                                                                            // Set copied state and reset after 2 seconds
+                                                                                                                            _set_copied.set(true);
+                                                                                                                            set_timeout(
+                                                                                                                                move || _set_copied.set(false),
+                                                                                                                                std::time::Duration::from_secs(2)
+                                                                                                                            );
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                }
+                                                                                                            >
+                                                                                                                {move || if copied.get() {
+                                                                                                                    view! {
+                                                                                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                                                                                        </svg>
+                                                                                                                        <span>"Copied!"</span>
+                                                                                                                    }
+                                                                                                                } else {
+                                                                                                                    view! {
+                                                                                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                                                                                                        </svg>
+                                                                                                                        <span>"Copy"</span>
+                                                                                                                    }
+                                                                                                                }}
+                                                                                                            </button>
+                                                                                                        </div>
                                                                                                     </div>
                                                                                                                 </div>
                                                                                                                 <button
