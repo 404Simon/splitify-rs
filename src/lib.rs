@@ -19,6 +19,9 @@ pub mod features {
 pub mod db;
 
 #[cfg(feature = "ssr")]
+pub mod session_store;
+
+#[cfg(feature = "ssr")]
 pub mod error;
 
 #[cfg(feature = "hydrate")]

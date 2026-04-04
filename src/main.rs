@@ -21,6 +21,7 @@ async fn main() {
             recurring_debts::handlers::scheduler::process_due_recurring_debts_internal,
             shopping_lists::{create_broadcaster, EventBroadcaster},
         },
+        session_store::SqliteStore,
     };
     use time::Duration;
     use tokio::sync::broadcast;
@@ -28,7 +29,6 @@ async fn main() {
     use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
     use tower::ServiceBuilder;
     use tower_sessions::{Expiry, Session, SessionManagerLayer};
-    use tower_sessions_sqlx_store::SqliteStore;
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
     if let Err(e) = dotenvy::dotenv() {
