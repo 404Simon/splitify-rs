@@ -9,6 +9,7 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
+      - ./.env:/app/.env:ro
     environment:
       - DATABASE_URL=sqlite:/app/data/splitify.db
       - RUST_LOG=info

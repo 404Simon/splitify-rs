@@ -18,44 +18,45 @@ jobs:
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@nightly
+      with:
+        targets: wasm32-unknown-unknown
 
-    - name: Add WASM target
-      run: rustup target add wasm32-unknown-unknown
+    - name: Setup Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: true
 
-    - name: Install Node.js (for tailwind)
+    - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
         node-version: '24'
 
-    - name: Install Node.js dependencies
-      run: npm install
+    - name: Install Node Dependencies
+      run: |
+        corepack enable
+        pnpm install --frozen-lockfile
+
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@main
+
+    - name: Ensure cargo bin on PATH
+      run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
     - name: Install SQLx CLI
+      run: cargo install sqlx-cli --no-default-features --features sqlite --locked
+
+    - name: Install cargo-leptos
+      run: cargo binstall cargo-leptos --no-confirm --locked
+
+    - name: Verify installed tools
       run: |
-        cargo install sqlx-cli --no-default-features --features sqlite
+        which cargo-leptos
+        cargo leptos --version
 
     - name: Setup database for SQLx compile-time verification
       run: |
         sqlx database create
         sqlx migrate run
-
-    - name: Cache cargo registry and target
-      uses: actions/cache@v5
-      with:
-        path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-
-    - name: Install cargo-leptos
-      run: |
-        curl --proto '=https' --tlsv1.3 -LsSf \
-          https://github.com/leptos-rs/cargo-leptos/releases/latest/download/cargo-leptos-installer.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
     - name: Build release with cargo-leptos
       run: |
