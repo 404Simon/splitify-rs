@@ -1,5 +1,5 @@
 #[cfg(feature = "ssr")]
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 #[cfg(feature = "ssr")]

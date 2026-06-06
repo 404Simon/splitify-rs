@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 use crate::features::shared_debts::{
-    handlers::{get_shared_debt_shares, DeleteSharedDebt},
+    handlers::{DeleteSharedDebt, get_shared_debt_shares},
     models::SharedDebtWithDetails,
 };
 

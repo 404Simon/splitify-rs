@@ -4,7 +4,7 @@ use leptos_router::hooks::use_navigate;
 use crate::{
     components::{AppLayout, Navigation},
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         groups::handlers::get_user_groups,
     },
 };

@@ -4,9 +4,9 @@ use leptos_router::{components::A, hooks::use_params_map};
 use crate::{
     components::{InputLabel, PrimaryButton, TextInput},
     features::shopping_lists::{
-        get_shopping_list, get_shopping_list_activity, get_shopping_list_items,
         AddShoppingListItem, DeleteShoppingList, DeleteShoppingListItem, ShoppingListActivity,
-        ShoppingListItem, ToggleShoppingListItem,
+        ShoppingListItem, ToggleShoppingListItem, get_shopping_list, get_shopping_list_activity,
+        get_shopping_list_items,
     },
 };
 
@@ -61,7 +61,7 @@ pub fn ShoppingListShow() -> impl IntoView {
     #[cfg(feature = "hydrate")]
     {
         use leptos::web_sys::{EventSource, MessageEvent};
-        use wasm_bindgen::{prelude::*, JsCast};
+        use wasm_bindgen::{JsCast, prelude::*};
 
         Effect::new(move |_| {
             if let (Some(gid), Some(lid)) = (group_id(), list_id()) {

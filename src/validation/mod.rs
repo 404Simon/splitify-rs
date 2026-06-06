@@ -27,11 +27,7 @@ pub fn sanitize_string(input: &str) -> String {
         .chars()
         .map(|c| {
             if c.is_control() {
-                if c.is_whitespace() {
-                    ' '
-                } else {
-                    '\0'
-                }
+                if c.is_whitespace() { ' ' } else { '\0' }
             } else {
                 c
             }

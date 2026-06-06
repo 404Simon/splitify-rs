@@ -10,7 +10,7 @@ use crate::{
         FormNumberInput, FormSelect, LoadingSpinner, MemberCheckboxItem, Navigation, PageHeader,
     },
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         groups::handlers::{get_group, get_group_members},
         recurring_debts::handlers::CreateRecurringDebt,
     },
@@ -63,10 +63,10 @@ pub fn RecurringDebtsCreate() -> impl IntoView {
 
     // Effect to initialize selected members (all members by default)
     Effect::new(move |_| {
-        if let Some(Ok(members)) = members_resource.get() {
-            if selected_members.get().is_empty() {
-                set_selected_members.set(members.iter().map(|m| m.id).collect());
-            }
+        if let Some(Ok(members)) = members_resource.get()
+            && selected_members.get().is_empty()
+        {
+            set_selected_members.set(members.iter().map(|m| m.id).collect());
         }
     });
 

@@ -1,8 +1,9 @@
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
+use leptos_meta::{Link, Meta, MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
+    StaticSegment,
     components::{Route, Router, Routes},
-    path, StaticSegment,
+    path,
 };
 
 use crate::{

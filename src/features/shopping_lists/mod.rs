@@ -5,6 +5,6 @@ pub mod utils;
 
 // Re-export commonly used items
 #[cfg(feature = "ssr")]
-pub use events::{broadcast_event, create_broadcaster, EventBroadcaster};
+pub use events::{EventBroadcaster, broadcast_event, create_broadcaster};
 pub use handlers::*;
 pub use models::*;

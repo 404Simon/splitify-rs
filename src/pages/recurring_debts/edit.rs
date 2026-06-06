@@ -7,10 +7,10 @@ use crate::{
         FormNumberInput, FormSelect, LoadingSpinner, MemberCheckboxItem, Navigation, PageHeader,
     },
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         groups::handlers::get_group_members,
         recurring_debts::handlers::{
-            get_recurring_debt, get_recurring_debt_members, UpdateRecurringDebt,
+            UpdateRecurringDebt, get_recurring_debt, get_recurring_debt_members,
         },
     },
 };

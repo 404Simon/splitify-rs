@@ -6,27 +6,27 @@ async fn main() {
     use std::convert::Infallible;
 
     use axum::{
+        Router,
         extract::{Path, State},
         response::sse::{Event, KeepAlive, Sse},
         routing::get,
-        Router,
     };
     use futures::stream::Stream;
     use leptos::prelude::*;
-    use leptos_axum::{generate_route_list, LeptosRoutes};
+    use leptos_axum::{LeptosRoutes, generate_route_list};
     use rustify_app::{
         app::*,
         db::init_db,
         features::{
             recurring_debts::handlers::scheduler::process_due_recurring_debts_internal,
-            shopping_lists::{create_broadcaster, EventBroadcaster},
+            shopping_lists::{EventBroadcaster, create_broadcaster},
         },
         session_store::SqliteStore,
     };
     use time::Duration;
     use tokio::sync::broadcast;
     use tokio_cron_scheduler::{Job, JobScheduler};
-    use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
+    use tokio_stream::{StreamExt as _, wrappers::BroadcastStream};
     use tower::ServiceBuilder;
     use tower_sessions::{Expiry, Session, SessionManagerLayer};
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

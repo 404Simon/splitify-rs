@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::features::shopping_lists::{get_shopping_lists, ShoppingListSummary};
+use crate::features::shopping_lists::{ShoppingListSummary, get_shopping_lists};
 
 #[component]
 pub fn ShoppingListsSection(group_id: Memo<i64>) -> impl IntoView {

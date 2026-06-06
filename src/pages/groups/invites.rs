@@ -7,10 +7,10 @@ use leptos_router::{
 use crate::{
     components::{AppLayout, FormField, FormInput, Navigation},
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         groups::handlers::get_group,
         invites::{
-            handlers::{get_group_invites, CreateInvite, DeleteInvite},
+            handlers::{CreateInvite, DeleteInvite, get_group_invites},
             models::InviteListItem,
         },
     },

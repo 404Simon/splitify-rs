@@ -4,7 +4,7 @@ use leptos_router::{
     hooks::{use_navigate, use_params_map},
 };
 
-use crate::features::shopping_lists::{get_shopping_list, UpdateShoppingList};
+use crate::features::shopping_lists::{UpdateShoppingList, get_shopping_list};
 
 #[component]
 pub fn ShoppingListEdit() -> impl IntoView {

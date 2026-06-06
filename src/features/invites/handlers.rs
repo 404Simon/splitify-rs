@@ -98,10 +98,10 @@ pub async fn create_invite(
     }
 
     // Validate name length if provided
-    if let Some(ref n) = name {
-        if n.len() > 128 {
-            return Err(ServerFnError::new("Name must be 128 characters or less"));
-        }
+    if let Some(ref n) = name
+        && n.len() > 128
+    {
+        return Err(ServerFnError::new("Name must be 128 characters or less"));
     }
 
     let session = extract::<Session>()

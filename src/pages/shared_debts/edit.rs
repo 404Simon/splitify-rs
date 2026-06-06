@@ -10,9 +10,9 @@ use crate::{
         MemberCheckboxItem, Navigation, PageHeader,
     },
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         groups::handlers::get_group_members,
-        shared_debts::handlers::{get_shared_debt, get_shared_debt_members, UpdateSharedDebt},
+        shared_debts::handlers::{UpdateSharedDebt, get_shared_debt, get_shared_debt_members},
     },
 };
 

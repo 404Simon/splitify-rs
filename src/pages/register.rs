@@ -56,22 +56,22 @@ pub fn RegisterPage() -> impl IntoView {
     // Effect to handle navigation after successful registration
     let has_refetched = RwSignal::new(false);
     Effect::new(move |_| {
-        if let Some(Ok(_)) = register_action.value().get() {
-            if !has_refetched.get() {
-                // Refetch user resource to update the global user context
-                user_resource.refetch();
-                has_refetched.set(true);
-            }
+        if let Some(Ok(_)) = register_action.value().get()
+            && !has_refetched.get()
+        {
+            // Refetch user resource to update the global user context
+            user_resource.refetch();
+            has_refetched.set(true);
         }
     });
 
     // Separate effect to navigate after resource is updated
     Effect::new(move |_| {
-        if has_refetched.get() {
-            if let Some(Ok(Some(_))) = user_resource.get() {
-                let target = redirect_to.get().unwrap_or_else(|| "/groups".to_string());
-                navigate(&target, Default::default());
-            }
+        if has_refetched.get()
+            && let Some(Ok(Some(_))) = user_resource.get()
+        {
+            let target = redirect_to.get().unwrap_or_else(|| "/groups".to_string());
+            navigate(&target, Default::default());
         }
     });
 

@@ -102,10 +102,10 @@ pub fn is_valid_email(email: &str) -> bool {
     }
 
     // Ensure TLD is at least 2 chars
-    if let Some(domain) = email.split('@').nth(1) {
-        if let Some(tld) = domain.split('.').next_back() {
-            return tld.len() >= 2;
-        }
+    if let Some(domain) = email.split('@').nth(1)
+        && let Some(tld) = domain.split('.').next_back()
+    {
+        return tld.len() >= 2;
     }
 
     false

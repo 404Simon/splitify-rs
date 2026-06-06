@@ -4,10 +4,10 @@ use leptos_router::hooks::{use_navigate, use_params_map};
 use crate::{
     components::{AppLayout, Navigation},
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         recurring_debts::handlers::{
-            get_generated_instances, get_recurring_debt, get_recurring_debt_shares,
-            DeleteRecurringDebt, GenerateNow, ToggleRecurringDebtActive,
+            DeleteRecurringDebt, GenerateNow, ToggleRecurringDebtActive, get_generated_instances,
+            get_recurring_debt, get_recurring_debt_shares,
         },
     },
 };

@@ -10,7 +10,7 @@ use crate::{
         PageHeader,
     },
     features::{
-        auth::{use_logout, UserSession},
+        auth::{UserSession, use_logout},
         groups::handlers::get_group,
         shopping_lists::CreateShoppingList,
     },

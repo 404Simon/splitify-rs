@@ -48,10 +48,10 @@ pub fn should_generate(recurring_debt: &RecurringDebt, today: Date) -> bool {
     }
 
     // Past end date
-    if let Some(end_date) = recurring_debt.end_date {
-        if today > end_date {
-            return false;
-        }
+    if let Some(end_date) = recurring_debt.end_date
+        && today > end_date
+    {
+        return false;
     }
 
     // Not yet time to generate
