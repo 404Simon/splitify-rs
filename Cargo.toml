@@ -18,7 +18,7 @@ wasm-bindgen = { version = "0.2.106", optional = true }
 web-sys = { version = "0.3", features = ["Navigator", "Clipboard", "Window"], optional = true }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate", "time"], default-features = false, optional = true }
+sqlx = { version = "0.9", features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate", "time"], default-features = false, optional = true }
 
 # Authentication & Sessions
 bcrypt = { version = "0.19", optional = true }
