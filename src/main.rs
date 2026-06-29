@@ -65,6 +65,13 @@ async fn main() {
 
     tracing::debug!("Session store migrated successfully");
 
+    // Session TTL in days (default: 7)
+    let session_ttl_days = std::env::var("SESSION_TTL_DAYS")
+        .unwrap_or_else(|_| "7".to_string())
+        .parse::<i64>()
+        .unwrap_or(7)
+        .max(1); // minimum 1 day
+
     // Session cookie configuration (configurable for development)
     // SESSION_SAME_SITE: "strict" (default), "lax", or "none"
     // SESSION_SECURE: "true" (default for production), "false" (for local HTTP
@@ -90,7 +97,7 @@ async fn main() {
     );
 
     let session_layer = SessionManagerLayer::new(session_store)
-        .with_expiry(Expiry::OnInactivity(Duration::weeks(1))) // 7 days
+        .with_expiry(Expiry::OnInactivity(Duration::days(session_ttl_days)))
         .with_same_site(same_site)
         .with_secure(secure);
 
