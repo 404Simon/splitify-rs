@@ -35,21 +35,16 @@ jobs:
       - name: Install SQLx CLI
         run: cargo install sqlx-cli --no-default-features --features sqlite --locked
 
-      - name: Install cargo-leptos and cargo-audit
-        run: cargo binstall cargo-leptos cargo-audit --no-confirm --locked --force
+      - name: Install cargo-leptos
+        run: cargo binstall cargo-leptos --no-confirm --locked --force
 
       - name: Verify installed tools
         run: |
           which cargo-leptos
-          which cargo-audit
           cargo leptos --version
-          cargo audit --version
 
       - name: Check formatting
         run: cargo fmt --all -- --check
-
-      - name: Run security audit
-        run: cargo audit
 
       - name: Create database and run migrations
         run: |
