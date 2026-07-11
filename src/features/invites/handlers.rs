@@ -58,7 +58,7 @@ pub async fn get_group_invites(group_id: i64) -> Result<Vec<InviteListItem>, Ser
     .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     // Format for date display
-    let format = format_description::parse("[month repr:long] [day], [year]")
+    let format = format_description::parse_borrowed::<2>("[month repr:long] [day], [year]")
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     // Convert to InviteListItem
