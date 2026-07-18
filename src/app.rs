@@ -65,7 +65,7 @@ pub fn App() -> impl IntoView {
         <Link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet"/>
 
         // Stylesheet injection
-        <Stylesheet id="leptos" href="/pkg/rustify-app.css"/>
+        <Stylesheet id="leptos" href="/pkg/splitify.css"/>
 
         // Document title
         <Title text="Splitify - Split Expenses with Friends"/>

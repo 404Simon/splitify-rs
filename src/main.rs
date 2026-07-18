@@ -14,7 +14,7 @@ async fn main() {
     use futures::stream::Stream;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
-    use rustify_app::{
+    use splitify::{
         app::*,
         db::init_db,
         features::{
@@ -41,7 +41,7 @@ async fn main() {
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
                 // Default log levels: debug for our app, info for dependencies
-                "rustify_app=debug,tower_http=debug,axum=info,sqlx=warn".into()
+                "splitify=debug,tower_http=debug,axum=info,sqlx=warn".into()
             }),
         )
         .with(tracing_subscriber::fmt::layer())

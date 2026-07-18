@@ -15,7 +15,7 @@ use super::sanitize_string;
 ///
 /// # Examples
 /// ```
-/// use rustify_app::validation::validate_username;
+/// use splitify::validation::validate_username;
 ///
 /// assert!(validate_username("john_doe").is_ok());
 /// assert!(validate_username("user-123").is_ok());
@@ -79,7 +79,7 @@ pub fn validate_password(password: &str) -> Result<(), ServerFnError> {
 ///
 /// # Examples
 /// ```
-/// use rustify_app::validation::is_valid_email;
+/// use splitify::validation::is_valid_email;
 ///
 /// assert!(is_valid_email("user@example.com"));
 /// assert!(is_valid_email("user.name+tag@example.co.uk"));

@@ -44,4 +44,4 @@ echo "Starting Splitify application..."
 echo "========================================="
 
 # Execute the application (replaces this shell process)
-exec /app/rustify-app
+exec /app/splitify

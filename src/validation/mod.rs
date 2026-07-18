@@ -16,7 +16,7 @@ use leptos::prelude::*;
 ///
 /// # Examples
 /// ```
-/// use rustify_app::validation::sanitize_string;
+/// use splitify::validation::sanitize_string;
 ///
 /// assert_eq!(sanitize_string("  hello  "), "hello");
 /// assert_eq!(sanitize_string("hello\nworld"), "hello world");
@@ -43,7 +43,7 @@ pub fn sanitize_string(input: &str) -> String {
 ///
 /// # Examples
 /// ```
-/// use rustify_app::validation::validate_name;
+/// use splitify::validation::validate_name;
 ///
 /// assert!(validate_name("My Group", 1, 255, "Group name").is_ok());
 /// assert!(validate_name("", 1, 255, "Group name").is_err());

@@ -18,7 +18,7 @@ use super::sanitize_string;
 ///
 /// # Examples
 /// ```
-/// use rustify_app::validation::validate_amount;
+/// use splitify::validation::validate_amount;
 ///
 /// assert!(validate_amount("10.50").is_ok());
 /// assert!(validate_amount("100").is_ok());

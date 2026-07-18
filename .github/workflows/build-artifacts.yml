@@ -9,7 +9,7 @@ jobs:
     permissions:
       contents: write
     env:
-      BUILD_NAME: "rustify-app-${{ github.ref_name }}-linux-x64"
+      BUILD_NAME: "splitify-${{ github.ref_name }}-linux-x64"
       DATABASE_URL: "sqlite:splitify.db"
 
     steps:
@@ -71,8 +71,8 @@ jobs:
         cp README.md LICENSE "$BUILD_NAME/" || true
         
         # Copy server binary
-        cp "target/release/rustify-app" "$BUILD_NAME/"
-        chmod +x "$BUILD_NAME/rustify-app"
+        cp "target/release/splitify" "$BUILD_NAME/"
+        chmod +x "$BUILD_NAME/splitify"
         
         # Copy site directory (WASM, JS, CSS, assets)
         cp -r target/site "$BUILD_NAME/"
@@ -97,7 +97,7 @@ jobs:
         echo "Listening on: $LEPTOS_SITE_ADDR"
         
         # Run the server
-        ./rustify-app
+        ./splitify
         EOF
         
         chmod +x "$BUILD_NAME/run.sh"

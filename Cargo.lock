@@ -2514,44 +2514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustify-app"
-version = "0.2.0"
-dependencies = [
- "async-trait",
- "axum",
- "bcrypt",
- "chrono",
- "console_error_panic_hook",
- "dotenvy",
- "futures",
- "leptos",
- "leptos_axum",
- "leptos_meta",
- "leptos_router",
- "parking_lot",
- "regex",
- "rmp-serde",
- "rust_decimal",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "tokio-cron-scheduler",
- "tokio-stream",
- "tower",
- "tower-sessions",
- "tower-sessions-core",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
- "uuid",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "rustls"
 version = "0.23.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2894,6 +2856,44 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
+]
+
+[[package]]
+name = "splitify"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "bcrypt",
+ "chrono",
+ "console_error_panic_hook",
+ "dotenvy",
+ "futures",
+ "leptos",
+ "leptos_axum",
+ "leptos_meta",
+ "leptos_router",
+ "parking_lot",
+ "regex",
+ "rmp-serde",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tokio-cron-scheduler",
+ "tokio-stream",
+ "tower",
+ "tower-sessions",
+ "tower-sessions-core",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

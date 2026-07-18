@@ -65,6 +65,6 @@ jobs:
         with:
           name: leptos-build
           path: |
-            target/release/rustify-app
+            target/release/splitify
             target/site/
           retention-days: 3
