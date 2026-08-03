@@ -547,19 +547,30 @@ pub fn GroupMap() -> impl IntoView {
                                                                 />
                                                             </div>
 
-                                                            <div class="relative h-dvh md:h-[calc(100vh-17rem)] md:min-h-[440px] md:rounded-xl md:overflow-hidden md:border md:border-gray-200 md:dark:border-gray-700 md:shadow-sm bg-white dark:bg-gray-900">
-                                                                <MapCanvas
-                                                                    container_id=MAP_ID.to_string()
-                                                                    config=config
-                                                                    markers=markers
-                                                                    add_mode=add_mode
-                                                                    temp_marker=temp_marker
-                                                                    selected_marker=selected_id
-                                                                    commands=commands
-                                                                    on_map_click=on_map_click
-                                                                    on_marker_selected=select_marker
-                                                                    on_temp_marker_moved=on_temp_marker_moved
-                                                                />
+                                                                <div class="relative h-dvh md:h-[calc(100vh-17rem)] md:min-h-[440px] md:rounded-xl md:overflow-hidden md:border md:border-gray-200 md:dark:border-gray-700 md:shadow-sm bg-white dark:bg-gray-900">
+                                                                    <MapCanvas
+                                                                        container_id=MAP_ID.to_string()
+                                                                        config=config
+                                                                        markers=markers
+                                                                        add_mode=add_mode
+                                                                        temp_marker=temp_marker
+                                                                        selected_marker=selected_id
+                                                                        commands=commands
+                                                                        on_map_click=on_map_click
+                                                                        on_marker_selected=select_marker
+                                                                        on_temp_marker_moved=on_temp_marker_moved
+                                                                    />
+
+                                                                    // Subtle tile attribution (replaces MapLibre's control with the logo).
+                                                                    <a
+                                                                        href="https://www.openfreemap.org/"
+                                                                        target="_blank"
+                                                                        rel="noopener"
+                                                                        class="absolute bottom-1 left-1/2 -translate-x-1/2 z-10 text-[10px] leading-none text-gray-400/80 dark:text-gray-500/80 hover:text-indigo-500 dark:hover:text-indigo-400"
+                                                                    >
+                                                                        "© OpenMapTiles © OpenStreetMap"
+                                                                    </a>
+
 
                                                                 // Corner controls: back (mobile), fit, list, add.
                                                                 // During add mode they hide so the search + form take over.

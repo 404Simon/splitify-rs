@@ -13,7 +13,6 @@
  */
 
 import {
-  AttributionControl,
   LngLatBounds,
   Map as MapLibreMap,
   Marker,
@@ -130,7 +129,8 @@ export function create(containerId, options) {
     attributionControl: false,
   });
 
-  map.addControl(new AttributionControl({ compact: true }));
+  // Attribution ("© OpenFreeMap") is rendered by the page as a subtle text link
+  // instead of MapLibre's default control, which adds a clunky logo button.
 
   const state = {
     map,
