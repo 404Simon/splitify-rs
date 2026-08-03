@@ -33,6 +33,9 @@ splitify.db*
 # Node modules (will be installed in Docker)
 node_modules/
 
+# Bundled map assets (built inside Docker via `pnpm build:map`)
+public/maplibre/
+
 # SQLx offline data (generated during Docker build)
 .sqlx/
 

@@ -7,6 +7,9 @@ node_modules/
 *.db-wal
 .env
 
+# Bundled JS/CSS assets (built from src/js via `pnpm build:map`)
+public/maplibre/
+
 .sqlx/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
