@@ -2,7 +2,7 @@
   "name": "splitify",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build:map": "NODE_ENV=production rollup -c",
     "watch:map": "rollup -c -w"
