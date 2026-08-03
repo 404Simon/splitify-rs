@@ -8,7 +8,7 @@
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
-use crate::features::maps::maplibre::MapCallbacks;
+use crate::features::maps::maplibre::{self, MapCallbacks};
 use crate::features::maps::models::{MapCommand, MapConfig, MapMarker};
 
 /// Interactive map canvas for a group's map.
@@ -30,7 +30,7 @@ use crate::features::maps::models::{MapCommand, MapConfig, MapMarker};
 /// - `on_temp_marker_moved`: fired with `(lng, lat)` when the user drags the
 ///   temporary marker to a new position.
 #[component]
-#[allow(unused)]
+#[cfg_attr(not(feature = "hydrate"), allow(unused))]
 pub fn MapCanvas(
     container_id: String,
     config: MapConfig,
@@ -43,29 +43,29 @@ pub fn MapCanvas(
     #[prop(into)] on_marker_selected: Callback<Option<i64>>,
     #[prop(into)] on_temp_marker_moved: Callback<(f64, f64)>,
 ) -> impl IntoView {
-    let map_ready = RwSignal::new(false);
-
     #[cfg(feature = "hydrate")]
     {
-        use crate::features::maps::maplibre;
-
+        let map_ready = RwSignal::new(false);
         let cancelled = RwSignal::new(false);
         let stored = StoredValue::new_local(None::<MapCallbacks>);
 
         let init_container = container_id.clone();
         let init_config = config.clone();
         request_animation_frame(move || {
-            init_map_with_retry(
-                0,
-                init_container,
-                init_config,
-                map_ready,
-                cancelled,
-                stored,
-                on_map_click,
-                on_marker_selected,
-                on_temp_marker_moved,
-            );
+            maplibre::when_glue_ready(move || {
+                if cancelled.get_untracked() {
+                    return;
+                }
+                init_map(
+                    init_container,
+                    init_config,
+                    map_ready,
+                    stored,
+                    on_map_click,
+                    on_marker_selected,
+                    on_temp_marker_moved,
+                );
+            });
         });
 
         // Keep the rendered markers in sync with the reactive state. The first
@@ -136,52 +136,19 @@ pub fn MapCanvas(
     }
 }
 
-/// Initialise the map once the glue module is available, retrying a bounded
-/// number of times to tolerate the module script loading after hydration.
+/// Create the map and attach its callbacks. Runs once the glue module is
+/// available (see [`maplibre::when_glue_ready`]).
 #[cfg(feature = "hydrate")]
-#[allow(clippy::too_many_arguments)]
-fn init_map_with_retry(
-    attempt: usize,
+fn init_map(
     container_id: String,
     config: MapConfig,
     map_ready: RwSignal<bool>,
-    cancelled: RwSignal<bool>,
     stored: StoredValue<Option<MapCallbacks>, LocalStorage>,
     on_map_click: Callback<(f64, f64)>,
     on_marker_selected: Callback<Option<i64>>,
     on_temp_marker_moved: Callback<(f64, f64)>,
 ) {
-    use crate::features::maps::maplibre;
-    use std::time::Duration;
     use wasm_bindgen::JsValue;
-
-    if cancelled.get_untracked() {
-        return;
-    }
-
-    if !maplibre::glue_loaded() {
-        if attempt < 100 {
-            set_timeout(
-                move || {
-                    init_map_with_retry(
-                        attempt + 1,
-                        container_id,
-                        config,
-                        map_ready,
-                        cancelled,
-                        stored,
-                        on_map_click,
-                        on_marker_selected,
-                        on_temp_marker_moved,
-                    );
-                },
-                Duration::from_millis(100),
-            );
-        } else {
-            maplibre::log_error("MapLibre glue did not load; the map is unavailable");
-        }
-        return;
-    }
 
     if let Err(error) = maplibre::create_map(
         &container_id,

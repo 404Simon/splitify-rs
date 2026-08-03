@@ -13,13 +13,18 @@ use leptos_router::{
 };
 
 use crate::{
-    components::{ErrorAlert, LoadingSpinner, MapCanvas, Navigation, PageHeader},
+    components::{
+        EmojiPicker, ErrorAlert, LoadingSpinner, MapAddButton, MapBackButton, MapCanvas,
+        MapFitButton, MapListButton, MarkerCarousel, MarkerDetailsCard, Navigation, PageHeader,
+        SearchOverlay,
+    },
     features::{
         auth::{UserSession, use_logout},
         groups::handlers::get_group,
+        maps::utils::{can_manage_marker, format_coordinate},
         maps::{
-            CreateMapMarker, DeleteMapMarker, EmojiCategory, MapCommand, MapMarker,
-            PlaceSearchResult, UpdateMapMarker, get_group_map_markers, get_map_config,
+            CreateMapMarker, DEFAULT_MARKER_EMOJI, DeleteMapMarker, EmojiCategory, MapCommand,
+            MapMarker, PlaceSearchResult, UpdateMapMarker, get_group_map_markers, get_map_config,
             search_places,
         },
     },
@@ -30,30 +35,6 @@ const MAP_ID: &str = "group-map";
 /// Search for an address or place is triggered once the query reaches this
 /// many characters.
 const SEARCH_MIN_LENGTH: usize = 3;
-
-/// Default marker icon used when no emoji is chosen.
-const DEFAULT_MARKER_EMOJI: &str = "📍";
-
-fn format_coordinate(value: f64) -> String {
-    format!("{value:.5}")
-}
-
-/// Google Maps "directions" URL for a marker, matching the legacy Splitify
-/// behavior (`google.com/maps/dir/?api=1&destination=...`). Opening it on a
-/// phone hands off straight to the Google Maps app. Prefers the saved address,
-/// falling back to the exact coordinates.
-fn google_maps_nav_url(marker: &MapMarker) -> String {
-    let destination = marker
-        .address
-        .clone()
-        .map(|a| a.trim().to_string())
-        .filter(|a| !a.is_empty())
-        .unwrap_or_else(|| format!("{},{}", marker.latitude, marker.longitude));
-    format!(
-        "https://www.google.com/maps/dir/?api=1&destination={}",
-        urlencoding::encode(&destination)
-    )
-}
 
 /// Group map page component.
 #[must_use]
@@ -149,7 +130,9 @@ pub fn GroupMap() -> impl IntoView {
     // Emoji picker dataset, loaded from the glue bundle on the client.
     let emoji_categories = RwSignal::new(Vec::<EmojiCategory>::new());
     #[cfg(feature = "hydrate")]
-    load_emoji_data(0, emoji_categories);
+    crate::features::maps::maplibre::when_glue_ready(move || {
+        emoji_categories.set(crate::features::maps::maplibre::get_emoji_categories());
+    });
 
     let selected_marker = move || {
         selected_id
@@ -298,59 +281,6 @@ pub fn GroupMap() -> impl IntoView {
         set_search_query.set(value);
         set_search_results.set(Vec::new());
     });
-
-    // When the mobile carousel is swiped to another marker, gently pan the map
-    // there. The highlight updates immediately, but the camera only moves once
-    // the swipe settles (debounced) so a fast swipe doesn't restart the pan on
-    // every scroll event.
-    let on_carousel_scroll = move |ev: leptos::ev::Event| {
-        #[cfg(feature = "hydrate")]
-        {
-            use wasm_bindgen::JsCast;
-
-            let target = event_target::<web_sys::HtmlElement>(&ev);
-            let center = target.scroll_left() + target.client_width() / 2;
-            let mut best_id = None;
-            let mut best_dist = i32::MAX;
-            let children = target.children();
-            for i in 0..children.length() {
-                if let Some(child) = children.item(i)
-                    && let Some(element) = child.dyn_into::<web_sys::HtmlElement>().ok()
-                {
-                    let mid = element.offset_left() + element.offset_width() / 2;
-                    let dist = (mid - center).abs();
-                    if dist < best_dist
-                        && let Some(id) = element
-                            .dataset()
-                            .get("markerId")
-                            .and_then(|value| value.parse::<i64>().ok())
-                    {
-                        best_id = Some(id);
-                        best_dist = dist;
-                    }
-                }
-            }
-            if let Some(id) = best_id {
-                if selected_id.get_untracked() != Some(id) {
-                    selected_id.set(Some(id));
-                }
-                if camera_target.get_untracked() != Some(id) {
-                    if let Some(handle) = camera_timer.get_untracked() {
-                        handle.clear();
-                    }
-                    camera_timer.set(
-                        set_timeout_with_handle(
-                            move || camera_target.set(Some(id)),
-                            std::time::Duration::from_millis(180),
-                        )
-                        .ok(),
-                    );
-                }
-            }
-        }
-        #[cfg(not(feature = "hydrate"))]
-        let _ = ev;
-    };
 
     // One gentle pan per camera-target change, shared by every selection path.
     Effect::new(move |_| {
@@ -589,248 +519,227 @@ pub fn GroupMap() -> impl IntoView {
                                                                     </a>
 
 
-                                                                // Corner controls: back (mobile), fit, list, add.
-                                                                // During add mode they hide so the search + form take over.
-                                                                {move || (!add_mode.get()).then(|| view! {
-                                                                    <div class="absolute top-3 left-3 z-10 md:hidden">
-                                                                        <MapBackButton href=format!("/groups/{gid}") />
-                                                                    </div>
-                                                                })}
-                                                                {move || (!add_mode.get()).then(|| view! {
-                                                                    <div class="absolute top-3 right-3 z-10">
-                                                                        <MapFitButton on_click=on_fit />
-                                                                    </div>
-                                                                })}
-                                                                {move || (!add_mode.get()).then(|| view! {
-                                                                    <div class="absolute bottom-3 left-3 z-10">
-                                                                        <MapListButton count=Signal::derive(move || markers.get().len()) open=list_open on_click=on_toggle_list />
-                                                                    </div>
-                                                                })}
-                                                                {move || (!add_mode.get()).then(|| view! {
-                                                                    <div class="absolute bottom-3 right-3 z-10">
-                                                                        <MapAddButton add_mode=add_mode on_toggle=on_toggle_add />
-                                                                    </div>
-                                                                })}
+                                                                    // Corner controls: back (mobile), fit, list, add.
+                                                                    // During add mode they hide so the search + form take over.
+                                                                    {move || (!add_mode.get()).then(|| view! {
+                                                                        <div class="absolute top-3 left-3 z-10 md:hidden">
+                                                                            <MapBackButton href=format!("/groups/{gid}") />
+                                                                        </div>
+                                                                    })}
+                                                                    {move || (!add_mode.get()).then(|| view! {
+                                                                        <div class="absolute top-3 right-3 z-10">
+                                                                            <MapFitButton on_click=on_fit />
+                                                                        </div>
+                                                                    })}
+                                                                    {move || (!add_mode.get()).then(|| view! {
+                                                                        <div class="absolute bottom-3 left-3 z-10">
+                                                                            <MapListButton count=Signal::derive(move || markers.get().len()) open=list_open on_click=on_toggle_list />
+                                                                        </div>
+                                                                    })}
+                                                                    {move || (!add_mode.get()).then(|| view! {
+                                                                        <div class="absolute bottom-3 right-3 z-10">
+                                                                            <MapAddButton add_mode=add_mode on_toggle=on_toggle_add />
+                                                                        </div>
+                                                                    })}
 
-                                                                // Address/place search overlay
-                                                                {move || add_mode.get().then(|| view! {
-                                                                    <div class="absolute top-3 left-3 right-3 z-20 md:left-1/2 md:right-auto md:w-[min(60%,26rem)] md:-translate-x-1/2">
-                                                                        <SearchOverlay
-                                                                            query=search_query
-                                                                            on_input=on_search_input
-                                                                            results=search_results
-                                                                            searching=searching
-                                                                            search_failed=search_failed
-                                                                            on_pick=pick_search_result
-                                                                        />
-                                                                    </div>
-                                                                })}
-
-                                                                // Add/edit details form
-                                                                {move || add_mode.get().then(|| view! {
-                                                                    <div class="absolute inset-x-0 bottom-0 z-20 md:inset-x-auto md:left-auto md:right-3 md:bottom-3 md:w-96">
-                                                                        <form
-                                                                            on:submit=on_submit
-                                                                            class="bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-200 dark:border-gray-700 p-4 space-y-3 md:rounded-xl md:border md:border-gray-200 md:dark:border-gray-700"
-                                                                        >
-                                                                            <div class="flex items-center justify-between">
-                                                                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                                                                                    {move || if editing_id.get().is_some() { "Edit Location" } else { "Add a Location" }}
-                                                                                </h3>
-                                                                                <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                                                                                    {move || {
-                                                                                        temp_marker.get().map(|(lng, lat)| format!("{}, {}", format_coordinate(lat), format_coordinate(lng))).unwrap_or_default()
-                                                                                    }}
-                                                                                </span>
-                                                                            </div>
-
-                                                                            <ErrorAlert message=error_message />
-
-                                                                            <EmojiPicker
-                                                                                emoji=emoji
-                                                                                categories=emoji_categories
-                                                                                on_select=Callback::new(move |value: String| set_emoji.set(value))
+                                                                    // Address/place search overlay
+                                                                    {move || add_mode.get().then(|| view! {
+                                                                        <div class="absolute top-3 left-3 right-3 z-20 md:left-1/2 md:right-auto md:w-[min(60%,26rem)] md:-translate-x-1/2">
+                                                                            <SearchOverlay
+                                                                                query=search_query
+                                                                                on_input=on_search_input
+                                                                                results=search_results
+                                                                                searching=searching
+                                                                                search_failed=search_failed
+                                                                                on_pick=pick_search_result
                                                                             />
+                                                                        </div>
+                                                                    })}
 
-                                                                            <input
-                                                                                type="text"
-                                                                                placeholder="Name *"
-                                                                                required
-                                                                                maxlength="255"
-                                                                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
-                                                                                prop:value=name
-                                                                                on:input=move |ev| set_name.set(event_target_value(&ev))
-                                                                            />
-
-                                                                            <input
-                                                                                type="text"
-                                                                                placeholder="Address (optional)"
-                                                                                maxlength="500"
-                                                                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
-                                                                                prop:value=address
-                                                                                on:input=move |ev| set_address.set(event_target_value(&ev))
-                                                                            />
-
-                                                                            <textarea
-                                                                                rows="2"
-                                                                                placeholder="Description (optional)"
-                                                                                maxlength="500"
-                                                                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm resize-none"
-                                                                                prop:value=description
-                                                                                on:input=move |ev| set_description.set(event_target_value(&ev))
-                                                                            ></textarea>
-
-                                                                            <div class="flex gap-2">
-                                                                                <button
-                                                                                    type="submit"
-                                                                                    disabled=move || is_loading.get()
-                                                                                    class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg font-medium text-sm transition-colors"
-                                                                                >
-                                                                                    {move || {
-                                                                                        if is_loading.get() {
-                                                                                            "Saving..."
-                                                                                        } else if editing_id.get().is_some() {
-                                                                                            "Save Changes"
-                                                                                        } else {
-                                                                                            "Save Marker"
-                                                                                        }
-                                                                                    }}
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    on:click=move |_| cancel_adding.run(())
-                                                                                    class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium text-sm transition-colors"
-                                                                                >
-                                                                                    "Cancel"
-                                                                                </button>
-                                                                            </div>
-                                                                            {move || editing_id.get().map(|id| view! {
-                                                                                <button
-                                                                                    type="button"
-                                                                                    on:click=move |_| {
-                                                                                        delete_action.dispatch(DeleteMapMarker { marker_id: id });
-                                                                                    }
-                                                                                    class="w-full px-4 py-2 rounded-lg font-medium text-sm transition-colors border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
-                                                                                >
-                                                                                    "Delete Location"
-                                                                                </button>
-                                                                            })}
-                                                                        </form>
-                                                                    </div>
-                                                                })}
-
-                                                                // Marker list panel (desktop)
-                                                                {move || list_open.get().then(|| view! {
-                                                                    <div class="absolute inset-y-0 right-0 z-30 hidden md:flex w-96 bg-white dark:bg-gray-800 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex-col">
-                                                                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                                                                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                                                                                {move || format!("Locations ({})", markers.get().len())}
-                                                                            </h3>
-                                                                            <button
-                                                                                on:click=move |_| list_open.set(false)
-                                                                                class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                                                title="Close list"
+                                                                    // Add/edit details form
+                                                                    {move || add_mode.get().then(|| view! {
+                                                                        <div class="absolute inset-x-0 bottom-0 z-20 md:inset-x-auto md:left-auto md:right-3 md:bottom-3 md:w-96">
+                                                                            <form
+                                                                                on:submit=on_submit
+                                                                                class="bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-200 dark:border-gray-700 p-4 space-y-3 md:rounded-xl md:border md:border-gray-200 md:dark:border-gray-700"
                                                                             >
-                                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                                                                </svg>
-                                                                            </button>
-                                                                        </div>
-
-                                                                        {move || selected_marker().map(|marker| {
-                                                                            let can_manage = marker.created_by == user.id || is_admin;
-                                                                            view! {
-                                                                                <div class="px-4 pt-3 pb-1 border-b border-gray-200 dark:border-gray-700">
-                                                                                    <MarkerDetailsCard
-                                                                                        marker=marker
-                                                                                        can_manage=can_manage
-                                                                                        on_edit=start_editing
-                                                                                    />
+                                                                                <div class="flex items-center justify-between">
+                                                                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                                                                        {move || if editing_id.get().is_some() { "Edit Location" } else { "Add a Location" }}
+                                                                                    </h3>
+                                                                                    <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                                                                        {move || {
+                                                                                            temp_marker.get().map(|(lng, lat)| format!("{}, {}", format_coordinate(lat), format_coordinate(lng))).unwrap_or_default()
+                                                                                        }}
+                                                                                    </span>
                                                                                 </div>
-                                                                            }
-                                                                        })}
 
-                                                                        <div class="flex-1 overflow-y-auto px-4 py-3">
-                                                                            {move || {
-                                                                                let list = markers.get();
-                                                                                if list.is_empty() {
-                                                                                    view! {
-                                                                                        <p class="text-sm text-gray-500 dark:text-gray-400 italic">
-                                                                                            "No locations yet — click \"Add Marker\" to save your first place."
-                                                                                        </p>
-                                                                                    }.into_any()
-                                                                                } else {
-                                                                                    view! {
-                                                                                        <ul class="space-y-1">
-                                                                                            {list.into_iter().map(|marker| {
-                                                                                                let marker_id = marker.id;
-                                                                                                let is_selected = selected_id.get() == Some(marker_id);
-                                                                                                view! {
-                                                                                                    <li>
-                                                                                                        <button
-                                                                                                            on:click=move |_| select_marker.run(Some(marker_id))
-                                                                                                            class=move || if is_selected {
-                                                                                                                "w-full text-left px-3 py-2.5 rounded-lg transition-colors bg-indigo-50 dark:bg-indigo-900/30"
-                                                                                                            } else {
-                                                                                                                "w-full text-left px-3 py-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
-                                                                                                            }
-                                                                                                        >
-                                                                                                            <div class="flex items-center gap-2 min-w-0">
-                                                                                                                <span class="shrink-0">{marker.emoji.clone()}</span>
-                                                                                                                <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{marker.name.clone()}</p>
-                                                                                                            </div>
-                                                                                                            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                                                                                                {marker.address.clone().unwrap_or_else(|| "by ".to_string() + &marker.creator_username)}
-                                                                                                            </p>
-                                                                                                        </button>
-                                                                                                    </li>
-                                                                                                }
-                                                                                            }).collect_view()}
-                                                                                        </ul>
-                                                                                    }.into_any()
-                                                                                }
-                                                                            }}
-                                                                        </div>
-                                                                    </div>
-                                                                })}
+                                                                                <ErrorAlert message=error_message />
 
-                                                                // Marker carousel (mobile) — floating detail cards, no sheet chrome.
-                                                                // The List button (bottom-left) toggles it and reads "Close".
-                                                                {move || list_open.get().then(|| view! {
-                                                                    <div class="absolute inset-x-0 bottom-20 z-30 md:hidden">
-                                                                        {move || {
-                                                                            let list = markers.get();
-                                                                            if list.is_empty() {
-                                                                                view! {
-                                                                                    <p class="px-4 text-sm text-gray-500 dark:text-gray-400 italic">
-                                                                                        "No locations yet — tap \"Add\" to save your first place."
-                                                                                    </p>
-                                                                                }.into_any()
-                                                                            } else {
-                                                                                view! {
-                                                                                    <div class="flex items-stretch gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar px-4" on:scroll=on_carousel_scroll>
-                                                                                        {list.into_iter().map(|marker| {
-                                                                                            let marker_id = marker.id;
-                                                                                            let can_manage = marker.created_by == user.id || is_admin;
-                                                                                            let is_selected = selected_id.get() == Some(marker_id);
-                                                                                            view! {
-                                                                                                <div data-marker-id={marker_id} class="snap-center shrink-0 w-[80%] max-w-[20rem]">
-                                                                                                    <MarkerCarouselCard
-                                                                                                        marker=marker
-                                                                                                        can_manage=can_manage
-                                                                                                        is_selected=is_selected
-                                                                                                        on_focus=focus_marker
-                                                                                                        on_edit=start_editing
-                                                                                                    />
-                                                                                                </div>
+                                                                                <EmojiPicker
+                                                                                    emoji=emoji
+                                                                                    categories=emoji_categories
+                                                                                    on_select=Callback::new(move |value: String| set_emoji.set(value))
+                                                                                />
+
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="Name *"
+                                                                                    required
+                                                                                    maxlength="255"
+                                                                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                                                                                    prop:value=name
+                                                                                    on:input=move |ev| set_name.set(event_target_value(&ev))
+                                                                                />
+
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="Address (optional)"
+                                                                                    maxlength="500"
+                                                                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                                                                                    prop:value=address
+                                                                                    on:input=move |ev| set_address.set(event_target_value(&ev))
+                                                                                />
+
+                                                                                <textarea
+                                                                                    rows="2"
+                                                                                    placeholder="Description (optional)"
+                                                                                    maxlength="500"
+                                                                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm resize-none"
+                                                                                    prop:value=description
+                                                                                    on:input=move |ev| set_description.set(event_target_value(&ev))
+                                                                                ></textarea>
+
+                                                                                <div class="flex gap-2">
+                                                                                    <button
+                                                                                        type="submit"
+                                                                                        disabled=move || is_loading.get()
+                                                                                        class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg font-medium text-sm transition-colors"
+                                                                                    >
+                                                                                        {move || {
+                                                                                            if is_loading.get() {
+                                                                                                "Saving..."
+                                                                                            } else if editing_id.get().is_some() {
+                                                                                                "Save Changes"
+                                                                                            } else {
+                                                                                                "Save Marker"
                                                                                             }
-                                                                                        }).collect_view()}
+                                                                                        }}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        on:click=move |_| cancel_adding.run(())
+                                                                                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium text-sm transition-colors"
+                                                                                    >
+                                                                                        "Cancel"
+                                                                                    </button>
+                                                                                </div>
+                                                                                {move || editing_id.get().map(|id| view! {
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        on:click=move |_| {
+                                                                                            delete_action.dispatch(DeleteMapMarker { marker_id: id });
+                                                                                        }
+                                                                                        class="w-full px-4 py-2 rounded-lg font-medium text-sm transition-colors border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                                                                    >
+                                                                                        "Delete Location"
+                                                                                    </button>
+                                                                                })}
+                                                                            </form>
+                                                                        </div>
+                                                                    })}
+
+                                                                    // Marker list panel (desktop)
+                                                                    {move || list_open.get().then(|| view! {
+                                                                        <div class="absolute inset-y-0 right-0 z-30 hidden md:flex w-96 bg-white dark:bg-gray-800 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex-col">
+                                                                            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                                                                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                                                                    {move || format!("Locations ({})", markers.get().len())}
+                                                                                </h3>
+                                                                                <button
+                                                                                    on:click=move |_| list_open.set(false)
+                                                                                    class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                                                    title="Close list"
+                                                                                >
+                                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                                                    </svg>
+                                                                                </button>
+                                                                            </div>
+
+                                                                            {move || selected_marker().map(|marker| {
+                                                                                let can_manage = can_manage_marker(&marker, user.id, is_admin);
+                                                                                view! {
+                                                                                    <div class="px-4 pt-3 pb-1 border-b border-gray-200 dark:border-gray-700">
+                                                                                        <MarkerDetailsCard
+                                                                                            marker=marker
+                                                                                            can_manage=can_manage
+                                                                                            on_edit=start_editing
+                                                                                        />
                                                                                     </div>
-                                                                                }.into_any()
-                                                                            }
-                                                                        }}
-                                                                    </div>
-                                                                })}
+                                                                                }
+                                                                            })}
+
+                                                                            <div class="flex-1 overflow-y-auto px-4 py-3">
+                                                                                {move || {
+                                                                                    let list = markers.get();
+                                                                                    if list.is_empty() {
+                                                                                        view! {
+                                                                                            <p class="text-sm text-gray-500 dark:text-gray-400 italic">
+                                                                                                "No locations yet — click \"Add Marker\" to save your first place."
+                                                                                            </p>
+                                                                                        }.into_any()
+                                                                                    } else {
+                                                                                        view! {
+                                                                                            <ul class="space-y-1">
+                                                                                                {list.into_iter().map(|marker| {
+                                                                                                    let marker_id = marker.id;
+                                                                                                    let is_selected = selected_id.get() == Some(marker_id);
+                                                                                                    view! {
+                                                                                                        <li>
+                                                                                                            <button
+                                                                                                                on:click=move |_| select_marker.run(Some(marker_id))
+                                                                                                                class=move || if is_selected {
+                                                                                                                    "w-full text-left px-3 py-2.5 rounded-lg transition-colors bg-indigo-50 dark:bg-indigo-900/30"
+                                                                                                                } else {
+                                                                                                                    "w-full text-left px-3 py-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                                                                                                                }
+                                                                                                            >
+                                                                                                                <div class="flex items-center gap-2 min-w-0">
+                                                                                                                    <span class="shrink-0">{marker.emoji.clone()}</span>
+                                                                                                                    <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{marker.name.clone()}</p>
+                                                                                                                </div>
+                                                                                                                <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                                                                                    {marker.address.clone().unwrap_or_else(|| format!("by {}", marker.creator_username))}
+                                                                                                                </p>
+                                                                                                            </button>
+                                                                                                        </li>
+                                                                                                    }
+                                                                                                }).collect_view()}
+                                                                                            </ul>
+                                                                                        }.into_any()
+                                                                                    }
+                                                                                }}
+                                                                            </div>
+                                                                        </div>
+                                                                    })}
+
+                                                                    // Marker carousel (mobile) — floating detail cards, no sheet chrome.
+                                                                    // The List button (bottom-left) toggles it and reads "Close".
+                                                                    {move || list_open.get().then(|| view! {
+                                                                        <div class="absolute inset-x-0 bottom-20 z-30 md:hidden">
+                                                                            <MarkerCarousel
+                                                                                markers=markers
+                                                                                user_id=user.id
+                                                                                is_admin=is_admin
+                                                                                selected_id=selected_id
+                                                                                camera_target=camera_target
+                                                                                camera_timer=camera_timer
+                                                                                on_focus=focus_marker
+                                                                                on_edit=start_editing
+                                                                            />
+                                                                        </div>
+                                                                    })}
                                                             </div>
                                                         </div>
                                                     }.into_any()
@@ -852,449 +761,5 @@ pub fn GroupMap() -> impl IntoView {
                 }
             }}
         </Suspense>
-    }
-}
-
-/// Compact card showing a marker's details with edit/navigate actions.
-#[component]
-fn MarkerDetailsCard(
-    marker: MapMarker,
-    can_manage: bool,
-    #[prop(into)] on_edit: Callback<MapMarker>,
-) -> impl IntoView {
-    let edit_marker = marker.clone();
-
-    view! {
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-            <div class="flex items-center gap-2 min-w-0">
-                <span class="text-xl shrink-0">{marker.emoji.clone()}</span>
-                <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{marker.name.clone()}</h3>
-            </div>
-            {marker.address.clone().map(|addr| view! {
-                <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5 truncate">{addr}</p>
-            })}
-            {marker.description.clone().map(|desc| view! {
-                <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{desc}</p>
-            })}
-            <dl class="mt-3 space-y-1 text-xs text-gray-500 dark:text-gray-400">
-                <div class="flex justify-between">
-                    <dt>"Added by"</dt>
-                    <dd class="font-medium">{marker.creator_username.clone()}</dd>
-                </div>
-                <div class="flex justify-between font-mono">
-                    <dt>"Coordinates"</dt>
-                    <dd>{format!("{}, {}", format_coordinate(marker.latitude), format_coordinate(marker.longitude))}</dd>
-                </div>
-            </dl>
-            <div class="mt-3 flex gap-2">
-                {can_manage.then(|| view! {
-                    <button
-                        on:click=move |_| on_edit.run(edit_marker.clone())
-                        class="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
-                    >
-                        "Edit"
-                    </button>
-                })}
-                <a
-                    href=google_maps_nav_url(&marker)
-                    target="_blank"
-                    rel="noopener"
-                    class="flex flex-1 items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
-                    "Navigate"
-                </a>
-            </div>
-        </div>
-    }
-}
-
-/// Floating "back to group" button (used on mobile where the header is hidden).
-#[component]
-fn MapBackButton(href: String) -> impl IntoView {
-    view! {
-        <a
-            href=href
-            title="Back to group"
-            class="inline-flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-            </svg>
-        </a>
-    }
-}
-
-/// Floating "Add"/"Cancel" action button (bottom-right).
-#[component]
-fn MapAddButton(add_mode: RwSignal<bool>, #[prop(into)] on_toggle: Callback<()>) -> impl IntoView {
-    view! {
-        <button
-            on:click=move |_| on_toggle.run(())
-            class=move || format!(
-                "inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg font-medium text-sm shadow-sm transition-colors {}",
-                if add_mode.get() {
-                    "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
-                } else {
-                    "bg-indigo-600 hover:bg-indigo-700 text-white"
-                }
-            )
-        >
-            {move || if add_mode.get() {
-                view! {
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                    "Cancel"
-                }.into_any()
-            } else {
-                view! {
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
-                    "Add"
-                }.into_any()
-            }}
-        </button>
-    }
-}
-
-/// Floating "fit to markers" button.
-#[component]
-fn MapFitButton(#[prop(into)] on_click: Callback<()>) -> impl IntoView {
-    view! {
-        <button
-            on:click=move |_| on_click.run(())
-            class="inline-flex items-center justify-center h-10 px-4 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-sm transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-        >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
-            </svg>
-            "Fit"
-        </button>
-    }
-}
-
-/// Floating marker list toggle. Shows "Close" while the list is open.
-#[component]
-fn MapListButton(
-    count: Signal<usize>,
-    #[prop(into)] open: Signal<bool>,
-    #[prop(into)] on_click: Callback<()>,
-) -> impl IntoView {
-    view! {
-        <button
-            on:click=move |_| on_click.run(())
-            class="inline-flex items-center justify-center h-10 px-4 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-sm transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-        >
-            {move || if open.get() {
-                view! {
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                    "Close"
-                }.into_any()
-            } else {
-                view! {
-                    <>
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
-                        </svg>
-                        "List"
-                        <span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">
-                            {move || count.get()}
-                        </span>
-                    </>
-                }.into_any()
-            }}
-        </button>
-    }
-}
-
-/// Address/place search box with a results dropdown.
-#[component]
-fn SearchOverlay(
-    #[prop(into)] query: Signal<String>,
-    #[prop(into)] on_input: Callback<String>,
-    #[prop(into)] results: Signal<Vec<PlaceSearchResult>>,
-    #[prop(into)] searching: Signal<bool>,
-    #[prop(into)] search_failed: Signal<bool>,
-    #[prop(into)] on_pick: Callback<PlaceSearchResult>,
-) -> impl IntoView {
-    view! {
-        <div class="relative">
-            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
-            <input
-                type="text"
-                placeholder="Search for an address or place"
-                autocomplete="off"
-                class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                prop:value=query
-                on:input=move |ev| on_input.run(event_target_value(&ev))
-            />
-            {move || {
-                let spinner = searching.get().then(|| view! {
-                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
-                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                    </div>
-                });
-                let failed = (!searching.get() && search_failed.get()).then(|| view! {
-                    <p class="mt-1 px-3 py-2 text-xs text-red-600 dark:text-red-400">"Search is unavailable right now."</p>
-                });
-                view! { {spinner} {failed} }
-            }}
-        </div>
-
-        {move || (!results.get().is_empty()).then(|| view! {
-            <ul class="mt-1 rounded-lg overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg max-h-64 overflow-y-auto">
-                {results.get().into_iter().map(|result| {
-                    let result_clone = result.clone();
-                    view! {
-                        <li>
-                            <button
-                                on:click=move |_| on_pick.run(result_clone.clone())
-                                class="w-full text-left px-3 py-2.5 text-sm text-gray-800 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-start gap-2"
-                            >
-                                <svg class="w-4 h-4 mt-0.5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                </svg>
-                                <span class="line-clamp-2">{result.display_name}</span>
-                            </button>
-                        </li>
-                    }
-                }).collect_view()}
-            </ul>
-        })}
-    }
-}
-
-/// Swipeable card used in the mobile marker carousel.
-#[component]
-fn MarkerCarouselCard(
-    marker: MapMarker,
-    can_manage: bool,
-    is_selected: bool,
-    #[prop(into)] on_focus: Callback<i64>,
-    #[prop(into)] on_edit: Callback<MapMarker>,
-) -> impl IntoView {
-    let marker_id = marker.id;
-    let edit_marker = marker.clone();
-
-    view! {
-        <div class="h-full flex flex-col">
-            <div
-                on:click=move |_| on_focus.run(marker_id)
-                class=move || format!(
-                    "bg-white dark:bg-gray-800 rounded-2xl border-2 p-4 shadow-lg transition-colors flex flex-col h-full cursor-pointer {}",
-                    if is_selected {
-                        "border-indigo-500 dark:border-indigo-400"
-                    } else {
-                        "border-gray-200 dark:border-gray-700"
-                    }
-                )
-            >
-                <div class="flex items-center gap-2 min-w-0">
-                    <span class="text-xl shrink-0">{marker.emoji.clone()}</span>
-                    <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{marker.name.clone()}</h3>
-                </div>
-                {marker.address.clone().map(|addr| view! {
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate">{addr}</p>
-                })}
-                {marker.description.clone().map(|desc| view! {
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{desc}</p>
-                })}
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 font-mono">
-                    {format!("{}, {}", format_coordinate(marker.latitude), format_coordinate(marker.longitude))}
-                </p>
-                <div class="flex gap-2 mt-auto pt-3">
-                    {can_manage.then(|| view! {
-                        <button
-                            on:click=move |ev| {
-                                ev.stop_propagation();
-                                on_edit.run(edit_marker.clone());
-                            }
-                            class="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
-                        >
-                            "Edit"
-                        </button>
-                    })}
-                    <a
-                        href=google_maps_nav_url(&marker)
-                        target="_blank"
-                        rel="noopener"
-                        on:click=move |ev| ev.stop_propagation()
-                        class="flex flex-1 items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        "Navigate"
-                    </a>
-                </div>
-            </div>
-        </div>
-    }
-}
-
-/// Loads the emoji dataset from the glue bundle, retrying until it is ready.
-#[cfg(feature = "hydrate")]
-fn load_emoji_data(attempt: usize, categories: RwSignal<Vec<EmojiCategory>>) {
-    use crate::features::maps::maplibre;
-
-    if !maplibre::glue_loaded() {
-        if attempt < 100 {
-            set_timeout(
-                move || load_emoji_data(attempt + 1, categories),
-                std::time::Duration::from_millis(50),
-            );
-        }
-        return;
-    }
-    categories.set(maplibre::get_emoji_categories());
-}
-
-/// Emoji picker with search and category filtering (data from `emoji.json`).
-/// Renders as a simple field that opens a modal popup with the full picker.
-#[component]
-fn EmojiPicker(
-    #[prop(into)] emoji: Signal<String>,
-    categories: RwSignal<Vec<EmojiCategory>>,
-    #[prop(into)] on_select: Callback<String>,
-) -> impl IntoView {
-    let (open, set_open) = signal(false);
-    let (query, set_query) = signal(String::new());
-    let (active_category, set_active_category) = signal("All".to_string());
-
-    let filtered = move || {
-        let needle = query.get().trim().to_lowercase();
-        let category = active_category.get();
-        categories
-            .get()
-            .into_iter()
-            .filter(|c| category == "All" || c.name == category)
-            .flat_map(|c| c.emojis)
-            .filter(|entry| needle.is_empty() || entry.title.to_lowercase().contains(&needle))
-            .take(300)
-            .collect::<Vec<_>>()
-    };
-
-    let open_picker = move || {
-        set_query.set(String::new());
-        set_active_category.set("All".to_string());
-        set_open.set(true);
-    };
-
-    view! {
-        <>
-            <div>
-                <span class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">"Icon"</span>
-                <button
-                    type="button"
-                    on:click=move |_| open_picker()
-                    class="w-full flex items-center gap-3 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 text-left"
-                >
-                    <span class="text-2xl leading-none">{move || emoji.get()}</span>
-                    <span class="text-sm text-gray-500 dark:text-gray-400">
-                        {move || if emoji.get() == DEFAULT_MARKER_EMOJI { "Pick an icon" } else { "Change icon" }}
-                    </span>
-                    <svg class="w-4 h-4 ml-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                </button>
-            </div>
-
-            {move || open.get().then(|| view! {
-                <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div class="absolute inset-0 bg-black/60" on:click=move |_| set_open.set(false) />
-                    <div class="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[80vh] flex flex-col">
-                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">"Choose an icon"</h3>
-                            <button
-                                type="button"
-                                on:click=move |_| set_open.set(false)
-                                class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title="Close"
-                            >
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="px-4 pt-3">
-                            <input
-                                type="text"
-                                placeholder="Search emojis..."
-                                autocomplete="off"
-                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
-                                prop:value=query
-                                on:input=move |ev| set_query.set(event_target_value(&ev))
-                            />
-                        </div>
-
-                        <div class="flex flex-wrap gap-1.5 px-4 py-2">
-                            {move || {
-                                let mut cats = vec!["All".to_string()];
-                                cats.extend(categories.get().into_iter().map(|c| c.name));
-                                cats.into_iter().map(|name| {
-                                    let is_active = active_category.get() == name;
-                                    let name_clone = name.clone();
-                                    view! {
-                                        <button
-                                            type="button"
-                                            on:click=move |_| set_active_category.set(name_clone.clone())
-                                            class=move || format!(
-                                                "shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors {}",
-                                                if is_active {
-                                                    "bg-indigo-600 text-white"
-                                                } else {
-                                                    "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                                                }
-                                            )
-                                        >
-                                            {name}
-                                        </button>
-                                    }
-                                }).collect_view()
-                            }}
-                        </div>
-
-                        <div class="grid grid-cols-8 gap-1 px-4 py-3 overflow-y-auto">
-                            {move || filtered().into_iter().map(|entry| {
-                                let entry_emoji = entry.emoji.clone();
-                                let is_selected = emoji.get() == entry.emoji;
-                                view! {
-                                    <button
-                                        type="button"
-                                        on:click=move |_| {
-                                            on_select.run(entry_emoji.clone());
-                                            set_open.set(false);
-                                        }
-                                        class=move || format!(
-                                            "aspect-square flex items-center justify-center rounded-lg text-xl transition-colors {}",
-                                            if is_selected {
-                                                "bg-indigo-100 dark:bg-indigo-900/40 ring-2 ring-indigo-500"
-                                            } else {
-                                                "hover:bg-gray-100 dark:hover:bg-gray-700"
-                                            }
-                                        )
-                                        title=entry.title
-                                    >
-                                        {entry.emoji}
-                                    </button>
-                                }
-                            }).collect_view()}
-                        </div>
-                    </div>
-                </div>
-            })}
-        </>
     }
 }

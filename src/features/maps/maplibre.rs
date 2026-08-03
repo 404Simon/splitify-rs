@@ -6,6 +6,7 @@
 //! bundle — never into the server binary.
 
 use js_sys::{Array, Function, Object, Reflect};
+use leptos::prelude::set_timeout;
 use serde::Serialize;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::{JsCast, JsValue};
@@ -49,6 +50,34 @@ impl MapCallbacks {
 /// Returns `true` when the `window.SplitifyMap` glue module has loaded.
 pub fn glue_loaded() -> bool {
     glue().is_some()
+}
+
+/// Run `callback` once the glue module is available, retrying until it loads
+/// (giving up after ~10 seconds). Both the map canvas and the emoji picker
+/// wait on the same module, so they share this single polling loop.
+pub fn when_glue_ready(callback: impl FnOnce() + 'static) {
+    if glue_loaded() {
+        callback();
+    } else {
+        poll_for_glue(0, Some(Box::new(callback)));
+    }
+}
+
+fn poll_for_glue(attempt: usize, callback: Option<Box<dyn FnOnce()>>) {
+    if glue_loaded() {
+        if let Some(callback) = callback {
+            callback();
+        }
+        return;
+    }
+    if attempt >= 100 {
+        log_error("MapLibre glue did not load; map features are unavailable");
+        return;
+    }
+    set_timeout(
+        move || poll_for_glue(attempt + 1, callback),
+        std::time::Duration::from_millis(100),
+    );
 }
 
 /// Resolve the glue object (`window.SplitifyMap`), if it exists yet.
@@ -315,6 +344,7 @@ pub fn remove_temp_marker(container_id: &str) {
 /// Highlight (scale up) the active marker, or `None` to clear the highlight.
 pub fn set_active_marker(container_id: &str, marker_id: Option<i64>) {
     if let Some(glue) = glue() {
+        // Marker ids never approach 2^53, so the i64→f64 round-trip is lossless.
         let value = match marker_id {
             Some(id) => JsValue::from_f64(id as f64),
             None => JsValue::null(),

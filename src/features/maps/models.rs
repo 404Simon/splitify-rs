@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+/// Default marker icon used when no emoji is chosen.
+pub const DEFAULT_MARKER_EMOJI: &str = "📍";
+
 /// A location marker placed by a group member on the group's map.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MapMarker {

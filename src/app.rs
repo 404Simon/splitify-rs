@@ -26,6 +26,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 // Set the theme class before first paint to avoid a flash.
                 // Mirrored in src/components/layout.rs (ThemeToggle).
+                // An explicit `light` class is kept alongside `dark` so that
+                // non-Leptos consumers (e.g. the map glue) can tell an explicit
+                // light choice apart from an unset one (which falls back to the
+                // OS preference).
                 <script>
                     (function () {
                         try {
@@ -34,6 +38,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                                 ? stored === "dark"
                                 : window.matchMedia("(prefers-color-scheme: dark)").matches;
                             document.documentElement.classList.toggle("dark", dark);
+                            document.documentElement.classList.toggle("light", !dark);
                         } catch (e) {}
                     })();
                 </script>
@@ -80,10 +85,15 @@ pub fn App() -> impl IntoView {
         Effect::new(move |_| {
             let is_dark = dark_mode.get();
             if let Some(element) = document().document_element() {
+                // Keep the explicit `light` class in sync alongside `dark` (see
+                // the shell script) so consumers can distinguish an explicit
+                // choice from an unset one.
                 if is_dark {
                     let _ = element.class_list().add_1("dark");
+                    let _ = element.class_list().remove_1("light");
                 } else {
                     let _ = element.class_list().remove_1("dark");
+                    let _ = element.class_list().add_1("light");
                 }
             }
             if let Some(storage) = web_sys::window()

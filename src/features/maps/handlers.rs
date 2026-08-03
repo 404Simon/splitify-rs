@@ -10,12 +10,53 @@ use super::models::{MapConfig, MapMarker, PlaceSearchResult};
 #[cfg(feature = "ssr")]
 use super::utils::{
     normalize_address, normalize_description, normalize_emoji, validate_coordinates,
-    verify_group_membership, verify_marker_creator,
+    verify_marker_creator,
 };
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
 #[cfg(feature = "ssr")]
+use crate::features::groups::permissions::verify_group_membership;
+#[cfg(feature = "ssr")]
 use crate::validation::{validate_description, validate_name};
+
+/// Sanitized marker fields, ready for persistence. Produced by
+/// [`validate_marker_input`] so create and update share identical validation.
+#[cfg(feature = "ssr")]
+struct MarkerInput {
+    name: String,
+    description: Option<String>,
+    address: Option<String>,
+    emoji: String,
+    latitude: f64,
+    longitude: f64,
+}
+
+/// Validate the fields shared by marker create and update.
+#[cfg(feature = "ssr")]
+fn validate_marker_input(
+    name: String,
+    description: Option<String>,
+    address: Option<String>,
+    emoji: String,
+    latitude: f64,
+    longitude: f64,
+) -> Result<MarkerInput, ServerFnError> {
+    let name = validate_name(&name, 1, 255, "Marker name")?;
+    let description = validate_description(&description.unwrap_or_default(), 500)?;
+    let description = normalize_description(Some(description));
+    let address = normalize_address(address);
+    let emoji = normalize_emoji(Some(emoji));
+    validate_coordinates(latitude, longitude)?;
+
+    Ok(MarkerInput {
+        name,
+        description,
+        address,
+        emoji,
+        latitude,
+        longitude,
+    })
+}
 
 /// Server function: Get all markers on a group's map.
 #[server(GetGroupMapMarkers)]
@@ -87,12 +128,7 @@ pub async fn create_map_marker(
     latitude: f64,
     longitude: f64,
 ) -> Result<i64, ServerFnError> {
-    let name = validate_name(&name, 1, 255, "Marker name")?;
-    let description = validate_description(&description.unwrap_or_default(), 500)?;
-    let description = normalize_description(Some(description));
-    let address = normalize_address(address);
-    let emoji = normalize_emoji(Some(emoji));
-    validate_coordinates(latitude, longitude)?;
+    let input = validate_marker_input(name, description, address, emoji, latitude, longitude)?;
 
     let session = extract::<Session>()
         .await
@@ -112,12 +148,12 @@ pub async fn create_map_marker(
         "#,
         group_id,
         user.id,
-        name,
-        description,
-        address,
-        emoji,
-        latitude,
-        longitude
+        input.name,
+        input.description,
+        input.address,
+        input.emoji,
+        input.latitude,
+        input.longitude
     )
     .execute(&pool)
     .await
@@ -137,12 +173,7 @@ pub async fn update_map_marker(
     latitude: f64,
     longitude: f64,
 ) -> Result<(), ServerFnError> {
-    let name = validate_name(&name, 1, 255, "Marker name")?;
-    let description = validate_description(&description.unwrap_or_default(), 500)?;
-    let description = normalize_description(Some(description));
-    let address = normalize_address(address);
-    let emoji = normalize_emoji(Some(emoji));
-    validate_coordinates(latitude, longitude)?;
+    let input = validate_marker_input(name, description, address, emoji, latitude, longitude)?;
 
     let session = extract::<Session>()
         .await
@@ -161,12 +192,12 @@ pub async fn update_map_marker(
         SET name = ?, description = ?, address = ?, emoji = ?, latitude = ?, longitude = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         "#,
-        name,
-        description,
-        address,
-        emoji,
-        latitude,
-        longitude,
+        input.name,
+        input.description,
+        input.address,
+        input.emoji,
+        input.latitude,
+        input.longitude,
         marker_id
     )
     .execute(&pool)
@@ -231,6 +262,21 @@ pub async fn get_map_config() -> Result<MapConfig, ServerFnError> {
     })
 }
 
+/// The shared HTTP client used for geocoding. Built once to avoid recreating
+/// the connection pool on every search.
+#[cfg(feature = "ssr")]
+fn geocoding_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| {
+        let user_agent = std::env::var("NOMINATIM_USER_AGENT")
+            .unwrap_or_else(|_| "Splitify/0.2 (expense sharing app)".to_string());
+        reqwest::Client::builder()
+            .user_agent(user_agent)
+            .build()
+            .expect("failed to build the geocoding HTTP client")
+    })
+}
+
 /// Server function: Search for an address or place using the Nominatim
 /// geocoding API (same endpoint as the legacy Splitify app).
 ///
@@ -242,6 +288,13 @@ pub async fn get_map_config() -> Result<MapConfig, ServerFnError> {
 pub async fn search_places(query: String) -> Result<Vec<PlaceSearchResult>, ServerFnError> {
     use serde::Deserialize;
 
+    let session = extract::<Session>()
+        .await
+        .map_err(|_| ServerFnError::new("Authentication error"))?;
+    get_user_from_session(&session)
+        .await
+        .ok_or_else(|| ServerFnError::new("Not authenticated"))?;
+
     let query = query.trim();
     if query.is_empty() {
         return Err(ServerFnError::new("Search query cannot be empty"));
@@ -252,8 +305,6 @@ pub async fn search_places(query: String) -> Result<Vec<PlaceSearchResult>, Serv
 
     let base_url = std::env::var("NOMINATIM_URL")
         .unwrap_or_else(|_| "https://nominatim.openstreetmap.org/search".to_string());
-    let user_agent = std::env::var("NOMINATIM_USER_AGENT")
-        .unwrap_or_else(|_| "Splitify/0.2 (expense sharing app)".to_string());
 
     #[derive(Deserialize)]
     struct RawResult {
@@ -262,10 +313,7 @@ pub async fn search_places(query: String) -> Result<Vec<PlaceSearchResult>, Serv
         lon: String,
     }
 
-    let results = reqwest::Client::builder()
-        .user_agent(user_agent)
-        .build()
-        .map_err(|e| ServerFnError::new(e.to_string()))?
+    let results = geocoding_client()
         .get(base_url)
         .query(&[("q", query), ("format", "json"), ("limit", "5")])
         .send()

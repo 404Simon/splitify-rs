@@ -74,6 +74,9 @@ const applyThemeToAll = () => {
   for (const watcher of themeWatchers) watcher();
 };
 darkQuery.addEventListener('change', applyThemeToAll);
+// The app toggles a `.dark`/`.light` class on `<html>` (see src/app.rs) and
+// that class is the single source of truth; observing it keeps the map in
+// sync without any handshake with the WASM layer.
 const themeObserver = new MutationObserver(applyThemeToAll);
 themeObserver.observe(document.documentElement, {
   attributes: true,
