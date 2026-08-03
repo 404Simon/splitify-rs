@@ -493,7 +493,7 @@ pub fn GroupMap() -> impl IntoView {
                                                                 </A>
 
                                                                 <PageHeader
-                                                                    title=format!("{} — Group Map", group.name)
+                                                                    title=format!("{} Map", group.name)
                                                                     subtitle="Find and save the places your group wants to visit".to_string()
                                                                 />
                                                             </div>
