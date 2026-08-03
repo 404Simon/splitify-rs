@@ -9,8 +9,8 @@ use tower_sessions::Session;
 use super::models::{MapConfig, MapMarker, PlaceSearchResult};
 #[cfg(feature = "ssr")]
 use super::utils::{
-    normalize_address, normalize_description, validate_coordinates, verify_group_membership,
-    verify_marker_creator,
+    normalize_address, normalize_description, normalize_emoji, validate_coordinates,
+    verify_group_membership, verify_marker_creator,
 };
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
@@ -41,6 +41,7 @@ pub async fn get_group_map_markers(group_id: i64) -> Result<Vec<MapMarker>, Serv
             m.name,
             m.description,
             m.address,
+            m.emoji,
             m.latitude as "latitude!",
             m.longitude as "longitude!",
             m.created_at,
@@ -66,6 +67,7 @@ pub async fn get_group_map_markers(group_id: i64) -> Result<Vec<MapMarker>, Serv
             name: row.name,
             description: row.description,
             address: row.address,
+            emoji: row.emoji,
             latitude: row.latitude,
             longitude: row.longitude,
             created_at: row.created_at,
@@ -81,6 +83,7 @@ pub async fn create_map_marker(
     name: String,
     description: Option<String>,
     address: Option<String>,
+    emoji: String,
     latitude: f64,
     longitude: f64,
 ) -> Result<i64, ServerFnError> {
@@ -88,6 +91,7 @@ pub async fn create_map_marker(
     let description = validate_description(&description.unwrap_or_default(), 500)?;
     let description = normalize_description(Some(description));
     let address = normalize_address(address);
+    let emoji = normalize_emoji(Some(emoji));
     validate_coordinates(latitude, longitude)?;
 
     let session = extract::<Session>()
@@ -103,14 +107,15 @@ pub async fn create_map_marker(
 
     let result = sqlx::query!(
         r#"
-        INSERT INTO group_map_markers (group_id, created_by, name, description, address, latitude, longitude)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO group_map_markers (group_id, created_by, name, description, address, emoji, latitude, longitude)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         group_id,
         user.id,
         name,
         description,
         address,
+        emoji,
         latitude,
         longitude
     )
@@ -128,6 +133,7 @@ pub async fn update_map_marker(
     name: String,
     description: Option<String>,
     address: Option<String>,
+    emoji: String,
     latitude: f64,
     longitude: f64,
 ) -> Result<(), ServerFnError> {
@@ -135,6 +141,7 @@ pub async fn update_map_marker(
     let description = validate_description(&description.unwrap_or_default(), 500)?;
     let description = normalize_description(Some(description));
     let address = normalize_address(address);
+    let emoji = normalize_emoji(Some(emoji));
     validate_coordinates(latitude, longitude)?;
 
     let session = extract::<Session>()
@@ -151,12 +158,13 @@ pub async fn update_map_marker(
     sqlx::query!(
         r#"
         UPDATE group_map_markers
-        SET name = ?, description = ?, address = ?, latitude = ?, longitude = ?, updated_at = CURRENT_TIMESTAMP
+        SET name = ?, description = ?, address = ?, emoji = ?, latitude = ?, longitude = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         "#,
         name,
         description,
         address,
+        emoji,
         latitude,
         longitude,
         marker_id

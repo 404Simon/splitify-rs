@@ -22,6 +22,7 @@ use crate::features::maps::models::{MapCommand, MapConfig, MapMarker};
 ///   selecting a marker.
 /// - `temp_marker`: position of the temporary draggable marker (`None` hides
 ///   it). Moved by the user it fires `on_temp_marker_moved`.
+/// - `selected_marker`: the currently selected marker id, shown scaled up.
 /// - `commands`: imperative one-shot commands (`FlyTo`, `Fit`).
 /// - `on_map_click`: fired with `(lng, lat)` whenever the map is clicked.
 /// - `on_marker_selected`: fired with the marker id (or `None`) when a marker
@@ -36,6 +37,7 @@ pub fn MapCanvas(
     markers: RwSignal<Vec<MapMarker>>,
     add_mode: RwSignal<bool>,
     temp_marker: RwSignal<Option<(f64, f64)>>,
+    selected_marker: RwSignal<Option<i64>>,
     commands: RwSignal<Option<MapCommand>>,
     #[prop(into)] on_map_click: Callback<(f64, f64)>,
     #[prop(into)] on_marker_selected: Callback<Option<i64>>,
@@ -91,6 +93,9 @@ pub fn MapCanvas(
                     MapCommand::FlyTo { lng, lat } => {
                         maplibre::fly_to(&command_container, lng, lat);
                     }
+                    MapCommand::CenterOn { lng, lat } => {
+                        maplibre::center_on(&command_container, lng, lat);
+                    }
                 }
                 commands.set(None);
             }
@@ -110,6 +115,12 @@ pub fn MapCanvas(
             } else {
                 maplibre::remove_temp_marker(&temp_container);
             }
+        });
+
+        // Highlight the selected marker.
+        let active_container = container_id.clone();
+        Effect::new(move |_| {
+            maplibre::set_active_marker(&active_container, selected_marker.get());
         });
 
         let cleanup_container = container_id.clone();

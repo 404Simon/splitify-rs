@@ -170,6 +170,7 @@ struct JsMarker<'a> {
     lng: f64,
     lat: f64,
     name: &'a str,
+    emoji: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
     creator: &'a str,
@@ -185,6 +186,7 @@ pub fn set_markers(container_id: &str, markers: &[MapMarker]) -> Result<(), Stri
             lng: marker.longitude,
             lat: marker.latitude,
             name: &marker.name,
+            emoji: &marker.emoji,
             description: marker.description.as_deref(),
             creator: &marker.creator_username,
         })
@@ -230,6 +232,21 @@ pub fn fly_to(container_id: &str, lng: f64, lat: f64) {
         let _ = call_method(
             &glue,
             "flyTo",
+            &Array::of3(
+                &JsValue::from_str(container_id),
+                &JsValue::from_f64(lng),
+                &JsValue::from_f64(lat),
+            ),
+        );
+    }
+}
+
+/// Gently pan the camera to a coordinate without a zoom animation.
+pub fn center_on(container_id: &str, lng: f64, lat: f64) {
+    if let Some(glue) = glue() {
+        let _ = call_method(
+            &glue,
+            "centerOn",
             &Array::of3(
                 &JsValue::from_str(container_id),
                 &JsValue::from_f64(lng),
@@ -293,4 +310,47 @@ pub fn remove_temp_marker(container_id: &str) {
             &Array::of1(&JsValue::from_str(container_id)),
         );
     }
+}
+
+/// Highlight (scale up) the active marker, or `None` to clear the highlight.
+pub fn set_active_marker(container_id: &str, marker_id: Option<i64>) {
+    if let Some(glue) = glue() {
+        let value = match marker_id {
+            Some(id) => JsValue::from_f64(id as f64),
+            None => JsValue::null(),
+        };
+        let _ = call_method(
+            &glue,
+            "setActiveMarker",
+            &Array::of2(&JsValue::from_str(container_id), &value),
+        );
+    }
+}
+
+/// Load the categorized emoji dataset from the glue bundle.
+pub fn get_emoji_categories() -> Vec<super::models::EmojiCategory> {
+    use super::models::{EmojiCategory, EmojiEntry};
+
+    let Some(glue) = glue() else {
+        return Vec::new();
+    };
+    let Ok(value) = call_method(&glue, "getEmojiData", &Array::new()) else {
+        return Vec::new();
+    };
+    let object = Object::from(value);
+    let keys = js_sys::Object::keys(&object);
+    let mut categories = Vec::new();
+    for key in keys.iter() {
+        let Some(name) = key.as_string() else {
+            continue;
+        };
+        let Ok(entries_value) = Reflect::get(&object, &key) else {
+            continue;
+        };
+        let Ok(emojis) = serde_wasm_bindgen::from_value::<Vec<EmojiEntry>>(entries_value) else {
+            continue;
+        };
+        categories.push(EmojiCategory { name, emojis });
+    }
+    categories
 }

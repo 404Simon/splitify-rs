@@ -11,6 +11,7 @@ pub struct MapMarker {
     pub name: String,
     pub description: Option<String>,
     pub address: Option<String>,
+    pub emoji: String,
     pub latitude: f64,
     pub longitude: f64,
     #[serde(with = "time::serde::rfc3339")]
@@ -25,6 +26,20 @@ pub struct PlaceSearchResult {
     pub display_name: String,
     pub lat: f64,
     pub lon: f64,
+}
+
+/// One emoji in the picker (see `src/js/emoji.json`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct EmojiEntry {
+    pub emoji: String,
+    pub title: String,
+}
+
+/// A named category of emojis for the picker.
+#[derive(Debug, Clone)]
+pub struct EmojiCategory {
+    pub name: String,
+    pub emojis: Vec<EmojiEntry>,
 }
 
 /// Client-facing map configuration resolved on the server so that the map
@@ -45,4 +60,6 @@ pub enum MapCommand {
     Fit,
     /// Smoothly fly to a coordinate.
     FlyTo { lng: f64, lat: f64 },
+    /// Gently pan to a coordinate without a zoom animation.
+    CenterOn { lng: f64, lat: f64 },
 }

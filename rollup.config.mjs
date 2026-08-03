@@ -1,5 +1,6 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
+import json from '@rollup/plugin-json';
 import postcss from 'rollup-plugin-postcss';
 
 const production = process.env.NODE_ENV === 'production';
@@ -19,6 +20,7 @@ export default {
   },
   plugins: [
     nodeResolve(),
+    json(),
     postcss({
       extract: 'map.css',
       minimize: false,

@@ -17,9 +17,9 @@ import {
   LngLatBounds,
   Map as MapLibreMap,
   Marker,
-  Popup,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import emojiData from './emoji.json';
 
 /** Styles scoped to the glue's custom DOM (kept here so the app stays clean). */
 const glueStyles = document.createElement('style');
@@ -35,24 +35,26 @@ glueStyles.textContent = `
   .splitify-temp-marker:active {
     cursor: grabbing;
   }
-  .splitify-marker-popup__title {
-    margin: 0 0 4px;
-    font-size: 14px;
-    font-weight: 600;
+  /* The marker element itself is positioned by MapLibre via an inline
+     transform; it must never carry a transition or scale, otherwise the
+     marker slides/lags behind the camera while the map pans. */
+  .splitify-marker-emoji {
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
   }
-  .splitify-marker-popup__description {
-    margin: 0 0 6px;
-    font-size: 13px;
+  .splitify-marker-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
   }
-  .splitify-marker-popup__meta {
-    margin: 0;
-    font-size: 11px;
-    opacity: 0.7;
+  .splitify-marker-icon.splitify-marker-active {
+    transform: scale(1.5);
   }
 `;
 document.head.appendChild(glueStyles);
 
-/** @typedef {{ id: number, lng: number, lat: number, name: string, description: string, creator: string }} MarkerDto */
+/** @typedef {{ id: number, lng: number, lat: number, name: string, emoji: string, description: string, creator: string }} MarkerDto */
 
 const DEFAULT_ZOOM = 2;
 
@@ -91,32 +93,21 @@ function runtimeFor(containerId) {
 }
 
 /**
- * Build the popup DOM node for a marker. Uses textContent (never innerHTML)
- * so user-provided strings cannot be used for markup injection.
+ * Build the marker element showing the location's emoji icon.
+ *
+ * The outer element is what MapLibre positions (inline `transform`), so the
+ * active-marker scale is applied to the inner icon instead — putting a
+ * `transform` transition on the positioned element makes markers lag behind
+ * the camera while it pans.
  */
-function buildPopupNode(marker) {
-  const container = document.createElement('div');
-  container.className = 'splitify-marker-popup';
-
-  const title = document.createElement('h3');
-  title.className = 'splitify-marker-popup__title';
-  title.textContent = marker.name;
-
-  const description = document.createElement('p');
-  description.className = 'splitify-marker-popup__description';
-  description.textContent = marker.description || '';
-
-  const meta = document.createElement('p');
-  meta.className = 'splitify-marker-popup__meta';
-  meta.textContent = marker.creator ? `Added by ${marker.creator}` : '';
-
-  container.appendChild(title);
-  if (description.textContent) {
-    container.appendChild(description);
-  }
-  container.appendChild(meta);
-
-  return container;
+function buildMarkerElement(emoji) {
+  const element = document.createElement('div');
+  element.className = 'splitify-marker-emoji';
+  const icon = document.createElement('span');
+  icon.className = 'splitify-marker-icon';
+  icon.textContent = emoji;
+  element.appendChild(icon);
+  return element;
 }
 
 function applyAddMode(state) {
@@ -153,6 +144,7 @@ export function create(containerId, options) {
       onTempMarkerMoved: null,
     },
     addMode: false,
+    activeMarkerId: null,
     lastStyle: null,
     applyTheme: null,
   };
@@ -217,20 +209,42 @@ export function setMarkers(containerId, markers) {
   state.markers.clear();
 
   for (const marker of markers) {
-    const popup = new Popup({ offset: 25, closeButton: false });
-    popup.setDOMContent(buildPopupNode(marker));
-
-    const markerInstance = new Marker()
+    const markerInstance = new Marker({ element: buildMarkerElement(marker.emoji) })
       .setLngLat([marker.lng, marker.lat])
-      .setPopup(popup)
       .addTo(state.map);
 
-    markerInstance.getElement().addEventListener('click', () => {
+    markerInstance.getElement().addEventListener('click', (event) => {
+      event.stopPropagation();
       state.callbacks.onMarkerClick?.(marker.id);
     });
 
     state.markers.set(marker.id, markerInstance);
   }
+
+  applyActiveMarker(state);
+}
+
+/** Highlight the active marker by scaling it up. */
+export function setActiveMarker(containerId, markerId) {
+  const state = runtimeFor(containerId);
+  if (!state) return;
+  state.activeMarkerId = markerId;
+  applyActiveMarker(state);
+}
+
+function applyActiveMarker(state) {
+  for (const [id, marker] of state.markers) {
+    const icon = marker.getElement().querySelector('.splitify-marker-icon');
+    icon?.classList.toggle(
+      'splitify-marker-active',
+      state.activeMarkerId != null && id === state.activeMarkerId,
+    );
+  }
+}
+
+/** The categorized emoji dataset used by the picker. */
+export function getEmojiData() {
+  return emojiData;
 }
 
 export function fitMarkers(containerId) {
@@ -255,6 +269,13 @@ export function flyTo(containerId, lng, lat, zoom = null) {
   const options = { center: [lng, lat], essential: true };
   if (zoom !== null) options.zoom = zoom;
   state.map.flyTo(options);
+}
+
+/** Gently pan to a coordinate (no zoom animation). */
+export function centerOn(containerId, lng, lat) {
+  const state = runtimeFor(containerId);
+  if (!state) return;
+  state.map.easeTo({ center: [lng, lat], duration: 300 });
 }
 
 export function getCenter(containerId) {
@@ -311,8 +332,11 @@ window.SplitifyMap = {
   destroy,
   setCallbacks,
   setMarkers,
+  setActiveMarker,
+  getEmojiData,
   fitMarkers,
   flyTo,
+  centerOn,
   getCenter,
   setAddMode,
   setTempMarker,

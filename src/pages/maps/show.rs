@@ -18,8 +18,9 @@ use crate::{
         auth::{UserSession, use_logout},
         groups::handlers::get_group,
         maps::{
-            CreateMapMarker, DeleteMapMarker, MapCommand, MapMarker, PlaceSearchResult,
-            UpdateMapMarker, get_group_map_markers, get_map_config, search_places,
+            CreateMapMarker, DeleteMapMarker, EmojiCategory, MapCommand, MapMarker,
+            PlaceSearchResult, UpdateMapMarker, get_group_map_markers, get_map_config,
+            search_places,
         },
     },
 };
@@ -29,6 +30,9 @@ const MAP_ID: &str = "group-map";
 /// Search for an address or place is triggered once the query reaches this
 /// many characters.
 const SEARCH_MIN_LENGTH: usize = 3;
+
+/// Default marker icon used when no emoji is chosen.
+const DEFAULT_MARKER_EMOJI: &str = "📍";
 
 fn format_coordinate(value: f64) -> String {
     format!("{value:.5}")
@@ -89,10 +93,25 @@ pub fn GroupMap() -> impl IntoView {
     let error_message = RwSignal::new(None::<String>);
     let commands = RwSignal::new(None::<MapCommand>);
 
+    // Camera target: the marker the map should center on. A single effect
+    // translates it into a gentle `CenterOn` command so every selection path
+    // (map click, list, card, carousel swipe) behaves the same and no two
+    // callers fight over the camera.
+    let camera_target = RwSignal::new(None::<i64>);
+    // Debounce handle used while swiping the carousel, so a swipe settles
+    // before the camera starts moving (instead of restarting the pan on every
+    // scroll event).
+    let camera_timer = RwSignal::new(None::<leptos::prelude::TimeoutHandle>);
+    // Selection that originated outside the carousel (map click / list / card
+    // click). The carousel auto-scrolls to it, but NOT to swipe-driven
+    // selection, which would fight the user's finger.
+    let external_selection = RwSignal::new(None::<i64>);
+
     // Add/edit form state
     let (name, set_name) = signal(String::new());
     let (description, set_description) = signal(String::new());
     let (address, set_address) = signal(String::new());
+    let (emoji, set_emoji) = signal(DEFAULT_MARKER_EMOJI.to_string());
 
     // Address/place search state
     let (search_query, set_search_query) = signal(String::new());
@@ -109,6 +128,11 @@ pub fn GroupMap() -> impl IntoView {
     let create_action = ServerAction::<CreateMapMarker>::new();
     let update_action = ServerAction::<UpdateMapMarker>::new();
     let delete_action = ServerAction::<DeleteMapMarker>::new();
+
+    // Emoji picker dataset, loaded from the glue bundle on the client.
+    let emoji_categories = RwSignal::new(Vec::<EmojiCategory>::new());
+    #[cfg(feature = "hydrate")]
+    load_emoji_data(0, emoji_categories);
 
     let selected_marker = move || {
         selected_id
@@ -133,10 +157,13 @@ pub fn GroupMap() -> impl IntoView {
         list_open.set(false);
         editing_id.set(None);
         selected_id.set(None);
+        external_selection.set(None);
+        camera_target.set(None);
         error_message.set(None);
         set_name.set(String::new());
         set_description.set(String::new());
         set_address.set(String::new());
+        set_emoji.set(DEFAULT_MARKER_EMOJI.to_string());
         set_search_query.set(String::new());
         set_search_results.set(Vec::new());
         set_searching.set(false);
@@ -168,16 +195,27 @@ pub fn GroupMap() -> impl IntoView {
                 if let Some(marker) = markers.get_untracked().into_iter().find(|m| m.id == id) {
                     selected_id.set(Some(marker.id));
                     editing_id.set(None);
-                    commands.set(Some(MapCommand::FlyTo {
-                        lng: marker.longitude,
-                        lat: marker.latitude,
-                    }));
+                    list_open.set(true);
+                    external_selection.set(Some(marker.id));
+                    camera_target.set(Some(marker.id));
                 }
             }
             None => {
                 editing_id.set(None);
                 selected_id.set(None);
+                external_selection.set(None);
+                camera_target.set(None);
             }
+        }
+    });
+
+    // Selecting a marker switches the camera gently instead of flying across
+    // the map.
+    let focus_marker = Callback::new(move |id: i64| {
+        if let Some(marker) = markers.get_untracked().into_iter().find(|m| m.id == id) {
+            selected_id.set(Some(marker.id));
+            external_selection.set(Some(marker.id));
+            camera_target.set(Some(marker.id));
         }
     });
 
@@ -188,6 +226,8 @@ pub fn GroupMap() -> impl IntoView {
         } else {
             editing_id.set(None);
             selected_id.set(None);
+            external_selection.set(None);
+            camera_target.set(None);
         }
     });
 
@@ -203,6 +243,7 @@ pub fn GroupMap() -> impl IntoView {
         set_name.set(marker.name.clone());
         set_description.set(marker.description.clone().unwrap_or_default());
         set_address.set(marker.address.clone().unwrap_or_default());
+        set_emoji.set(marker.emoji.clone());
         set_search_query.set(String::new());
         set_search_results.set(Vec::new());
         error_message.set(None);
@@ -241,7 +282,10 @@ pub fn GroupMap() -> impl IntoView {
         set_search_results.set(Vec::new());
     });
 
-    // When the mobile carousel is swiped to another marker, fly the map there.
+    // When the mobile carousel is swiped to another marker, gently pan the map
+    // there. The highlight updates immediately, but the camera only moves once
+    // the swipe settles (debounced) so a fast swipe doesn't restart the pan on
+    // every scroll event.
     let on_carousel_scroll = move |ev: leptos::ev::Event| {
         #[cfg(feature = "hydrate")]
         {
@@ -269,20 +313,60 @@ pub fn GroupMap() -> impl IntoView {
                     }
                 }
             }
-            if let Some(id) = best_id
-                && selected_id.get_untracked() != Some(id)
-                && let Some(marker) = markers.get_untracked().into_iter().find(|m| m.id == id)
-            {
-                selected_id.set(Some(id));
-                commands.set(Some(MapCommand::FlyTo {
-                    lng: marker.longitude,
-                    lat: marker.latitude,
-                }));
+            if let Some(id) = best_id {
+                if selected_id.get_untracked() != Some(id) {
+                    selected_id.set(Some(id));
+                }
+                if camera_target.get_untracked() != Some(id) {
+                    if let Some(handle) = camera_timer.get_untracked() {
+                        handle.clear();
+                    }
+                    camera_timer.set(
+                        set_timeout_with_handle(
+                            move || camera_target.set(Some(id)),
+                            std::time::Duration::from_millis(180),
+                        )
+                        .ok(),
+                    );
+                }
             }
         }
         #[cfg(not(feature = "hydrate"))]
         let _ = ev;
     };
+
+    // One gentle pan per camera-target change, shared by every selection path.
+    Effect::new(move |_| {
+        if let Some(id) = camera_target.get()
+            && let Some(marker) = markers.get_untracked().into_iter().find(|m| m.id == id)
+        {
+            commands.set(Some(MapCommand::CenterOn {
+                lng: marker.longitude,
+                lat: marker.latitude,
+            }));
+        }
+    });
+
+    // When the mobile carousel opens (or the selection was made outside it —
+    // map click, list, card), snap it to the selected marker's card. Swipe
+    // driven selection is deliberately excluded: scrolling the carousel to the
+    // card the user is already looking at would fight their finger.
+    Effect::new(move |_| {
+        let open = list_open.get();
+        let id = external_selection.get();
+        #[cfg(feature = "hydrate")]
+        {
+            if open
+                && let Some(id) = id
+                && let Ok(Some(card)) =
+                    document().query_selector(&format!(".snap-x [data-marker-id=\"{id}\"]"))
+            {
+                card.scroll_into_view();
+            }
+        }
+        #[cfg(not(feature = "hydrate"))]
+        let _ = (open, id);
+    });
 
     // Debounced address/place search.
     Effect::new(move |_| {
@@ -369,6 +453,7 @@ pub fn GroupMap() -> impl IntoView {
                 name: marker_name,
                 description,
                 address,
+                emoji: emoji.get_untracked(),
                 latitude: lat,
                 longitude: lng,
             });
@@ -378,6 +463,7 @@ pub fn GroupMap() -> impl IntoView {
                 name: marker_name,
                 description,
                 address,
+                emoji: emoji.get_untracked(),
                 latitude: lat,
                 longitude: lng,
             });
@@ -468,6 +554,7 @@ pub fn GroupMap() -> impl IntoView {
                                                                     markers=markers
                                                                     add_mode=add_mode
                                                                     temp_marker=temp_marker
+                                                                    selected_marker=selected_id
                                                                     commands=commands
                                                                     on_map_click=on_map_click
                                                                     on_marker_selected=select_marker
@@ -530,6 +617,12 @@ pub fn GroupMap() -> impl IntoView {
                                                                             </div>
 
                                                                             <ErrorAlert message=error_message />
+
+                                                                            <EmojiPicker
+                                                                                emoji=emoji
+                                                                                categories=emoji_categories
+                                                                                on_select=Callback::new(move |value: String| set_emoji.set(value))
+                                                                            />
 
                                                                             <input
                                                                                 type="text"
@@ -644,7 +737,10 @@ pub fn GroupMap() -> impl IntoView {
                                                                                                                 "w-full text-left px-3 py-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
                                                                                                             }
                                                                                                         >
-                                                                                                            <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{marker.name.clone()}</p>
+                                                                                                            <div class="flex items-center gap-2 min-w-0">
+                                                                                                                <span class="shrink-0">{marker.emoji.clone()}</span>
+                                                                                                                <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{marker.name.clone()}</p>
+                                                                                                            </div>
                                                                                                             <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
                                                                                                                 {marker.address.clone().unwrap_or_else(|| "by ".to_string() + &marker.creator_username)}
                                                                                                             </p>
@@ -685,7 +781,7 @@ pub fn GroupMap() -> impl IntoView {
                                                                                                         marker=marker
                                                                                                         can_manage=can_manage
                                                                                                         is_selected=is_selected
-                                                                                                        on_focus=Callback::new(move |id: i64| select_marker.run(Some(id)))
+                                                                                                        on_focus=focus_marker
                                                                                                         on_edit=start_editing
                                                                                                         on_delete=Callback::new(move |id: i64| { delete_action.dispatch(DeleteMapMarker { marker_id: id }); })
                                                                                                     />
@@ -736,7 +832,10 @@ fn MarkerDetailsCard(
 
     view! {
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
-            <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{marker.name.clone()}</h3>
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="text-xl shrink-0">{marker.emoji.clone()}</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{marker.name.clone()}</h3>
+            </div>
             {marker.address.clone().map(|addr| view! {
                 <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5 truncate">{addr}</p>
             })}
@@ -963,29 +1062,20 @@ fn MarkerCarouselCard(
 
     view! {
         <div class="h-full flex flex-col">
-            <div class=move || format!(
-                "bg-white dark:bg-gray-800 rounded-2xl border-2 p-4 shadow-lg transition-colors flex flex-col h-full {}",
-                if is_selected {
-                    "border-indigo-500 dark:border-indigo-400"
-                } else {
-                    "border-gray-200 dark:border-gray-700"
-                }
-            )>
-                <div class="flex items-start justify-between gap-2">
+            <div
+                on:click=move |_| on_focus.run(marker_id)
+                class=move || format!(
+                    "bg-white dark:bg-gray-800 rounded-2xl border-2 p-4 shadow-lg transition-colors flex flex-col h-full cursor-pointer {}",
+                    if is_selected {
+                        "border-indigo-500 dark:border-indigo-400"
+                    } else {
+                        "border-gray-200 dark:border-gray-700"
+                    }
+                )
+            >
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-xl shrink-0">{marker.emoji.clone()}</span>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{marker.name.clone()}</h3>
-                    <button
-                        on:click=move |ev| {
-                            ev.stop_propagation();
-                            on_focus.run(marker_id);
-                        }
-                        class="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
-                    >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        "Locate"
-                    </button>
                 </div>
                 {marker.address.clone().map(|addr| view! {
                     <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate">{addr}</p>
@@ -997,7 +1087,7 @@ fn MarkerCarouselCard(
                     {format!("{}, {}", format_coordinate(marker.latitude), format_coordinate(marker.longitude))}
                 </p>
                 {can_manage.then(|| view! {
-                    <div class="flex gap-2 mt-3">
+                    <div class="flex gap-2 mt-auto pt-3">
                         <button
                             on:click=move |ev| {
                                 ev.stop_propagation();
@@ -1030,5 +1120,161 @@ fn MarkerCarouselCard(
                 })}
             </div>
         </div>
+    }
+}
+
+/// Loads the emoji dataset from the glue bundle, retrying until it is ready.
+#[cfg(feature = "hydrate")]
+fn load_emoji_data(attempt: usize, categories: RwSignal<Vec<EmojiCategory>>) {
+    use crate::features::maps::maplibre;
+
+    if !maplibre::glue_loaded() {
+        if attempt < 100 {
+            set_timeout(
+                move || load_emoji_data(attempt + 1, categories),
+                std::time::Duration::from_millis(50),
+            );
+        }
+        return;
+    }
+    categories.set(maplibre::get_emoji_categories());
+}
+
+/// Emoji picker with search and category filtering (data from `emoji.json`).
+/// Renders as a simple field that opens a modal popup with the full picker.
+#[component]
+fn EmojiPicker(
+    #[prop(into)] emoji: Signal<String>,
+    categories: RwSignal<Vec<EmojiCategory>>,
+    #[prop(into)] on_select: Callback<String>,
+) -> impl IntoView {
+    let (open, set_open) = signal(false);
+    let (query, set_query) = signal(String::new());
+    let (active_category, set_active_category) = signal("All".to_string());
+
+    let filtered = move || {
+        let needle = query.get().trim().to_lowercase();
+        let category = active_category.get();
+        categories
+            .get()
+            .into_iter()
+            .filter(|c| category == "All" || c.name == category)
+            .flat_map(|c| c.emojis)
+            .filter(|entry| needle.is_empty() || entry.title.to_lowercase().contains(&needle))
+            .take(300)
+            .collect::<Vec<_>>()
+    };
+
+    let open_picker = move || {
+        set_query.set(String::new());
+        set_active_category.set("All".to_string());
+        set_open.set(true);
+    };
+
+    view! {
+        <>
+            <div>
+                <span class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">"Icon"</span>
+                <button
+                    type="button"
+                    on:click=move |_| open_picker()
+                    class="w-full flex items-center gap-3 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 text-left"
+                >
+                    <span class="text-2xl leading-none">{move || emoji.get()}</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400">
+                        {move || if emoji.get() == DEFAULT_MARKER_EMOJI { "Pick an icon" } else { "Change icon" }}
+                    </span>
+                    <svg class="w-4 h-4 ml-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+            </div>
+
+            {move || open.get().then(|| view! {
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div class="absolute inset-0 bg-black/60" on:click=move |_| set_open.set(false) />
+                    <div class="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[80vh] flex flex-col">
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">"Choose an icon"</h3>
+                            <button
+                                type="button"
+                                on:click=move |_| set_open.set(false)
+                                class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                title="Close"
+                            >
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="px-4 pt-3">
+                            <input
+                                type="text"
+                                placeholder="Search emojis..."
+                                autocomplete="off"
+                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                                prop:value=query
+                                on:input=move |ev| set_query.set(event_target_value(&ev))
+                            />
+                        </div>
+
+                        <div class="flex flex-wrap gap-1.5 px-4 py-2">
+                            {move || {
+                                let mut cats = vec!["All".to_string()];
+                                cats.extend(categories.get().into_iter().map(|c| c.name));
+                                cats.into_iter().map(|name| {
+                                    let is_active = active_category.get() == name;
+                                    let name_clone = name.clone();
+                                    view! {
+                                        <button
+                                            type="button"
+                                            on:click=move |_| set_active_category.set(name_clone.clone())
+                                            class=move || format!(
+                                                "shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors {}",
+                                                if is_active {
+                                                    "bg-indigo-600 text-white"
+                                                } else {
+                                                    "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                                }
+                                            )
+                                        >
+                                            {name}
+                                        </button>
+                                    }
+                                }).collect_view()
+                            }}
+                        </div>
+
+                        <div class="grid grid-cols-8 gap-1 px-4 py-3 overflow-y-auto">
+                            {move || filtered().into_iter().map(|entry| {
+                                let entry_emoji = entry.emoji.clone();
+                                let is_selected = emoji.get() == entry.emoji;
+                                view! {
+                                    <button
+                                        type="button"
+                                        on:click=move |_| {
+                                            on_select.run(entry_emoji.clone());
+                                            set_open.set(false);
+                                        }
+                                        class=move || format!(
+                                            "aspect-square flex items-center justify-center rounded-lg text-xl transition-colors {}",
+                                            if is_selected {
+                                                "bg-indigo-100 dark:bg-indigo-900/40 ring-2 ring-indigo-500"
+                                            } else {
+                                                "hover:bg-gray-100 dark:hover:bg-gray-700"
+                                            }
+                                        )
+                                        title=entry.title
+                                    >
+                                        {entry.emoji}
+                                    </button>
+                                }
+                            }).collect_view()}
+                        </div>
+                    </div>
+                </div>
+            })}
+        </>
     }
 }

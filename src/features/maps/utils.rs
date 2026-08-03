@@ -96,3 +96,21 @@ pub fn normalize_description(description: Option<String>) -> Option<String> {
 pub fn normalize_address(address: Option<String>) -> Option<String> {
     normalize_description(address)
 }
+
+/// The marker icon shown on the map. Falls back to the default pin when
+/// missing, and is capped so it cannot be abused.
+#[cfg(feature = "ssr")]
+pub fn normalize_emoji(emoji: Option<String>) -> String {
+    const DEFAULT_EMOJI: &str = "📍";
+    emoji
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            if value.chars().count() <= 8 {
+                value
+            } else {
+                DEFAULT_EMOJI.to_string()
+            }
+        })
+        .unwrap_or_else(|| DEFAULT_EMOJI.to_string())
+}
