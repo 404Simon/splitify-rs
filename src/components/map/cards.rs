@@ -133,28 +133,31 @@ pub fn MarkerCarouselCard(
 
 /// Swipeable carousel of marker cards shown on mobile when the list is open.
 ///
-/// Swiping selects the nearest card and, once the swipe settles (debounced),
-/// pans the map camera to it through `camera_target`.
+/// Swiping selects the nearest card and immediately flies the camera to it
+/// (through `on_camera`), without waiting for the scroll-snap animation to
+/// settle.
 #[component]
 pub fn MarkerCarousel(
     markers: RwSignal<Vec<MapMarker>>,
     user_id: i64,
     is_admin: bool,
     selected_id: RwSignal<Option<i64>>,
-    camera_target: RwSignal<Option<i64>>,
-    camera_timer: RwSignal<Option<TimeoutHandle>>,
     #[prop(into)] on_focus: Callback<i64>,
     #[prop(into)] on_edit: Callback<MapMarker>,
+    #[prop(into)] on_camera: Callback<(f64, f64)>,
 ) -> impl IntoView {
-    // `camera_target`/`camera_timer` only drive the camera from the client-side
-    // scroll handler, so they are unused in the server-rendered shell.
+    // The id the camera last flew to; guards against re-firing the same
+    // command on every scroll event while the snap animation settles.
+    let fired_id = RwSignal::new(None::<i64>);
+    // `fired_id`/`on_camera` only drive the camera from the client-side scroll
+    // handler, so they are unused in the server-rendered shell.
     #[cfg(not(feature = "hydrate"))]
-    let _ = (camera_target, camera_timer);
+    let _ = (fired_id, on_camera);
 
-    // When the carousel is swiped to another marker, gently pan the map there.
-    // The highlight updates immediately, but the camera only moves once the
-    // swipe settles (debounced) so a fast swipe doesn't restart the pan on
-    // every scroll event.
+    // As the carousel is swiped, select the nearest card and fly the map to it
+    // immediately. The highlight updates at once; the camera follows on the
+    // first scroll event that changes the nearest card (no debounce), so it
+    // does not wait for the scroll-snap animation to finish.
     let on_scroll = move |ev: leptos::ev::Event| {
         #[cfg(feature = "hydrate")]
         {
@@ -186,17 +189,12 @@ pub fn MarkerCarousel(
                 if selected_id.get_untracked() != Some(id) {
                     selected_id.set(Some(id));
                 }
-                if camera_target.get_untracked() != Some(id) {
-                    if let Some(handle) = camera_timer.get_untracked() {
-                        handle.clear();
-                    }
-                    camera_timer.set(
-                        set_timeout_with_handle(
-                            move || camera_target.set(Some(id)),
-                            std::time::Duration::from_millis(180),
-                        )
-                        .ok(),
-                    );
+                if fired_id.get_untracked() != Some(id)
+                    && let Some(marker) =
+                        markers.get_untracked().into_iter().find(|m| m.id == id)
+                {
+                    fired_id.set(Some(id));
+                    on_camera.run((marker.longitude, marker.latitude));
                 }
             }
         }

@@ -92,14 +92,11 @@ pub fn GroupMap() -> impl IntoView {
     let commands = RwSignal::new(None::<MapCommand>);
 
     // Camera target: the marker the map should center on. A single effect
-    // translates it into a gentle `CenterOn` command so every selection path
-    // (map click, list, card, carousel swipe) behaves the same and no two
-    // callers fight over the camera.
+    // translates it into a gentle `CenterOn` command so every deliberate
+    // selection path (map click, list, card tap) behaves the same and no two
+    // callers fight over the camera. Carousel swipes bypass this and fly
+    // directly via `MapCommand::FlyTo`.
     let camera_target = RwSignal::new(None::<i64>);
-    // Debounce handle used while swiping the carousel, so a swipe settles
-    // before the camera starts moving (instead of restarting the pan on every
-    // scroll event).
-    let camera_timer = RwSignal::new(None::<leptos::prelude::TimeoutHandle>);
     // Selection that originated outside the carousel (map click / list / card
     // click). The carousel auto-scrolls to it, but NOT to swipe-driven
     // selection, which would fight the user's finger.
@@ -329,7 +326,8 @@ pub fn GroupMap() -> impl IntoView {
         run_search.run(value);
     });
 
-    // One gentle pan per camera-target change, shared by every selection path.
+    // One gentle pan per camera-target change, shared by every deliberate
+    // selection path (map click, list, card tap).
     Effect::new(move |_| {
         if let Some(id) = camera_target.get()
             && let Some(marker) = markers.get_untracked().into_iter().find(|m| m.id == id)
@@ -339,6 +337,12 @@ pub fn GroupMap() -> impl IntoView {
                 lat: marker.latitude,
             }));
         }
+    });
+
+    // Carousel swipes fly the camera with the zoom animation (same as picking
+    // a search result), instead of the gentle pan used for deliberate clicks.
+    let carousel_camera = Callback::new(move |(lng, lat): (f64, f64)| {
+        commands.set(Some(MapCommand::FlyTo { lng, lat }));
     });
 
     // When the mobile carousel opens (or the selection was made outside it —
@@ -733,10 +737,9 @@ pub fn GroupMap() -> impl IntoView {
                                                                                 user_id=user.id
                                                                                 is_admin=is_admin
                                                                                 selected_id=selected_id
-                                                                                camera_target=camera_target
-                                                                                camera_timer=camera_timer
                                                                                 on_focus=focus_marker
                                                                                 on_edit=start_editing
+                                                                                on_camera=carousel_camera
                                                                             />
                                                                         </div>
                                                                     })}
