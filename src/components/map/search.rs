@@ -14,6 +14,16 @@ pub fn SearchOverlay(
     #[prop(into)] search_failed: Signal<bool>,
     #[prop(into)] on_pick: Callback<PlaceSearchResult>,
 ) -> impl IntoView {
+    let input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
+    let clear = move |_| {
+        on_input.run(String::new());
+        // The clear button stole focus; hand it back to the input so the user
+        // can immediately type a new query.
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
     view! {
         <div class="relative">
             <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -23,20 +33,43 @@ pub fn SearchOverlay(
                 type="text"
                 placeholder="Search for an address or place"
                 autocomplete="off"
-                class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                node_ref=input_ref
+                class=move || format!(
+                    "w-full pl-10 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 {}",
+                    if query.get().is_empty() && !searching.get() { "pr-4" } else { "pr-10" }
+                )
                 prop:value=query
                 on:input=move |ev| on_input.run(event_target_value(&ev))
             />
             {move || {
-                let spinner = searching.get().then(|| view! {
-                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
-                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                    </div>
-                });
                 let failed = (!searching.get() && search_failed.get()).then(|| view! {
                     <p class="mt-1 px-3 py-2 text-xs text-red-600 dark:text-red-400">"Search is unavailable right now."</p>
                 });
-                view! { {spinner} {failed} }
+                let right = if searching.get() {
+                    view! {
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! {
+                        <button
+                            type="button"
+                            on:click=clear
+                            title="Clear search"
+                            aria-label="Clear search"
+                            class=move || format!(
+                                "absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 {}",
+                                if query.get().is_empty() { "invisible" } else { "" }
+                            )
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    }.into_any()
+                };
+                view! { {right} {failed} }
             }}
         </div>
 

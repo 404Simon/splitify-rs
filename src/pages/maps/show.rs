@@ -117,11 +117,51 @@ pub fn GroupMap() -> impl IntoView {
     let (searching, set_searching) = signal(false);
     let (search_failed, set_search_failed) = signal(false);
     let search_timer = RwSignal::new(None::<leptos::prelude::TimeoutHandle>);
-    // Set when a search result is picked so the programmatic query change does
-    // not trigger another round-trip to the geocoder.
-    let search_lock = RwSignal::new(false);
     // Monotonic counter used to discard stale in-flight search responses.
     let search_seq = RwSignal::new(0u64);
+
+    // Debounced search triggered only by user input (`on_search_input`).
+    // Picking a result fills the query field programmatically without going
+    // through this path, so no "suppress the next run" flag is needed.
+    let run_search = Callback::new(move |raw: String| {
+        let query = raw.trim().to_string();
+        if let Some(handle) = search_timer.get_untracked() {
+            handle.clear();
+        }
+        if query.len() < SEARCH_MIN_LENGTH {
+            set_search_results.set(Vec::new());
+            set_searching.set(false);
+            return;
+        }
+        let seq = search_seq.get_untracked() + 1;
+        search_seq.set(seq);
+        set_searching.set(true);
+        set_search_failed.set(false);
+        let handle = set_timeout_with_handle(
+            move || {
+                spawn_local(async move {
+                    match search_places(query).await {
+                        Ok(results) => {
+                            if search_seq.get_untracked() == seq {
+                                set_search_results.set(results);
+                            }
+                        }
+                        Err(_) => {
+                            if search_seq.get_untracked() == seq {
+                                set_search_failed.set(true);
+                            }
+                        }
+                    }
+                    if search_seq.get_untracked() == seq {
+                        set_searching.set(false);
+                    }
+                });
+            },
+            std::time::Duration::from_millis(400),
+        )
+        .ok();
+        search_timer.set(handle);
+    });
 
     let create_action = ServerAction::<CreateMapMarker>::new();
     let update_action = ServerAction::<UpdateMapMarker>::new();
@@ -147,7 +187,9 @@ pub fn GroupMap() -> impl IntoView {
         set_search_query.set(String::new());
         set_search_results.set(Vec::new());
         set_searching.set(false);
-        search_lock.set(false);
+        if let Some(handle) = search_timer.get_untracked() {
+            handle.clear();
+        }
         search_seq.set(search_seq.get_untracked() + 1);
         error_message.set(None);
     });
@@ -167,7 +209,9 @@ pub fn GroupMap() -> impl IntoView {
         set_search_query.set(String::new());
         set_search_results.set(Vec::new());
         set_searching.set(false);
-        search_lock.set(false);
+        if let Some(handle) = search_timer.get_untracked() {
+            handle.clear();
+        }
         search_seq.set(search_seq.get_untracked() + 1);
 
         let (default_lng, default_lat) = config_resource
@@ -253,10 +297,13 @@ pub fn GroupMap() -> impl IntoView {
     let pick_search_result = Callback::new(move |result: PlaceSearchResult| {
         set_address.set(result.display_name.clone());
         temp_marker.set(Some((result.lon, result.lat)));
-        // Invalidate any in-flight search so its late response cannot repopulate
-        // the dropdown, then lock so the query change below is not re-searched.
+        // Invalidate any in-flight search so its late response cannot
+        // repopulate the dropdown, and cancel any pending debounce so the
+        // programmatic query change below is not re-searched.
         search_seq.set(search_seq.get_untracked() + 1);
-        search_lock.set(true);
+        if let Some(handle) = search_timer.get_untracked() {
+            handle.clear();
+        }
         set_search_query.set(result.display_name.clone());
         set_search_results.set(Vec::new());
         set_searching.set(false);
@@ -277,9 +324,9 @@ pub fn GroupMap() -> impl IntoView {
     let on_fit = Callback::new(move |_: ()| commands.set(Some(MapCommand::Fit)));
     let on_toggle_list = Callback::new(move |_: ()| list_open.set(!list_open.get()));
     let on_search_input = Callback::new(move |value: String| {
-        search_lock.set(false);
-        set_search_query.set(value);
+        set_search_query.set(value.clone());
         set_search_results.set(Vec::new());
+        run_search.run(value);
     });
 
     // One gentle pan per camera-target change, shared by every selection path.
@@ -313,53 +360,6 @@ pub fn GroupMap() -> impl IntoView {
         }
         #[cfg(not(feature = "hydrate"))]
         let _ = (open, id);
-    });
-
-    // Debounced address/place search.
-    Effect::new(move |_| {
-        // Cancel any pending search from a previous keystroke.
-        if let Some(handle) = search_timer.get_untracked() {
-            handle.clear();
-        }
-        // A picked result changed the query programmatically — don't re-search.
-        if search_lock.get_untracked() {
-            search_lock.set(false);
-            return;
-        }
-        let query = search_query.get().trim().to_string();
-        if query.len() < SEARCH_MIN_LENGTH {
-            set_search_results.set(Vec::new());
-            set_searching.set(false);
-            return;
-        }
-        let seq = search_seq.get_untracked() + 1;
-        search_seq.set(seq);
-        set_searching.set(true);
-        set_search_failed.set(false);
-        let handle = set_timeout_with_handle(
-            move || {
-                spawn_local(async move {
-                    match search_places(query).await {
-                        Ok(results) => {
-                            if search_seq.get_untracked() == seq {
-                                set_search_results.set(results);
-                            }
-                        }
-                        Err(_) => {
-                            if search_seq.get_untracked() == seq {
-                                set_search_failed.set(true);
-                            }
-                        }
-                    }
-                    if search_seq.get_untracked() == seq {
-                        set_searching.set(false);
-                    }
-                });
-            },
-            std::time::Duration::from_millis(400),
-        )
-        .ok();
-        search_timer.set(handle);
     });
 
     let on_submit = move |ev: leptos::ev::SubmitEvent| {
