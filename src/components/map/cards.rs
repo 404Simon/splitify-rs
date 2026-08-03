@@ -190,8 +190,7 @@ pub fn MarkerCarousel(
                     selected_id.set(Some(id));
                 }
                 if fired_id.get_untracked() != Some(id)
-                    && let Some(marker) =
-                        markers.get_untracked().into_iter().find(|m| m.id == id)
+                    && let Some(marker) = markers.get_untracked().into_iter().find(|m| m.id == id)
                 {
                     fired_id.set(Some(id));
                     on_camera.run((marker.longitude, marker.latitude));
