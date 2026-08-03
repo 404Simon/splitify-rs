@@ -116,6 +116,43 @@ pub fn GuestLayout(children: Children) -> impl IntoView {
     }
 }
 
+/// Sun/moon dark mode toggle button.
+///
+/// Reads and toggles the app-wide `dark` signal provided by the root `App`
+/// (see `src/app.rs`). Applying the class and persisting the choice happens
+/// in an effect in `App`.
+#[must_use]
+#[component]
+pub fn ThemeToggle() -> impl IntoView {
+    let dark_mode = expect_context::<RwSignal<bool>>();
+
+    view! {
+        <button
+            type="button"
+            on:click=move |_| dark_mode.set(!dark_mode.get())
+            title=move || if dark_mode.get() { "Switch to light mode" } else { "Switch to dark mode" }
+            aria-label="Toggle dark mode"
+            class="inline-flex items-center justify-center p-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none transition-colors"
+        >
+            {move || if dark_mode.get() {
+                // Sun icon (shown in dark mode, click to go light)
+                view! {
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                }.into_any()
+            } else {
+                // Moon icon (shown in light mode, click to go dark)
+                view! {
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                }.into_any()
+            }}
+        </button>
+    }
+}
+
 /// Navigation component for authenticated pages
 #[must_use]
 #[component]
@@ -149,6 +186,9 @@ pub fn Navigation(username: String, #[prop(into)] on_logout: Callback<()>) -> im
 
                     // Settings Dropdown (Desktop)
                     <div class="hidden sm:flex sm:items-center sm:ms-6">
+                        <div class="me-2">
+                            <ThemeToggle/>
+                        </div>
                         <div class="relative">
                             <button
                                 on:click=move |_| set_open.set(!open.get())
@@ -217,6 +257,9 @@ pub fn Navigation(username: String, #[prop(into)] on_logout: Callback<()>) -> im
                         </div>
 
                         <div class="mt-3 space-y-1">
+                            <div class="px-4 py-2">
+                                <ThemeToggle/>
+                            </div>
                             <button
                                 on:click=move |_| {
                                     on_logout.run(());

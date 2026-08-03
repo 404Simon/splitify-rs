@@ -9,6 +9,8 @@ use crate::features::auth::models::UserSession;
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
 #[cfg(feature = "ssr")]
+use crate::features::groups::permissions::verify_group_membership;
+#[cfg(feature = "ssr")]
 use crate::validation::validate_name;
 
 /// Server function: Get all groups for the current user
@@ -83,21 +85,7 @@ pub async fn get_group(group_id: i64) -> Result<Group, ServerFnError> {
 
     let pool = expect_context::<SqlitePool>();
 
-    // Check if user is a member of the group
-    let is_member = sqlx::query!(
-        "SELECT COUNT(*) as \"count!\" FROM group_members WHERE group_id = ? AND user_id = ?",
-        group_id,
-        user.id
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    if is_member.count == 0 {
-        return Err(ServerFnError::new(
-            "Unauthorized: Not a member of this group",
-        ));
-    }
+    verify_group_membership(&pool, user.id, group_id).await?;
 
     // Fetch the group
     let group = sqlx::query!(
@@ -133,21 +121,7 @@ pub async fn get_group_members(group_id: i64) -> Result<Vec<GroupMemberInfo>, Se
 
     let pool = expect_context::<SqlitePool>();
 
-    // Check if user is a member of the group
-    let is_member = sqlx::query!(
-        "SELECT COUNT(*) as \"count!\" FROM group_members WHERE group_id = ? AND user_id = ?",
-        group_id,
-        user.id
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    if is_member.count == 0 {
-        return Err(ServerFnError::new(
-            "Unauthorized: Not a member of this group",
-        ));
-    }
+    verify_group_membership(&pool, user.id, group_id).await?;
 
     // Get the group creator ID
     let group = sqlx::query!("SELECT created_by FROM groups WHERE id = ?", group_id)

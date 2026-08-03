@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_meta::{Link, Meta, MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Link, Meta, MetaTags, Script, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     StaticSegment,
     components::{Route, Router, Routes},
@@ -9,10 +9,10 @@ use leptos_router::{
 use crate::{
     features::auth::get_user,
     pages::{
-        GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage, InviteAccept,
-        LoginPage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow, RegisterPage,
-        SharedDebtsCreate, SharedDebtsEdit, ShoppingListCreate, ShoppingListEdit, ShoppingListShow,
-        TransactionsCreate, TransactionsEdit,
+        GroupMap, GroupsCreate, GroupsEdit, GroupsIndex, GroupsInvites, GroupsShow, HomePage,
+        InviteAccept, LoginPage, RecurringDebtsCreate, RecurringDebtsEdit, RecurringDebtsShow,
+        RegisterPage, SharedDebtsCreate, SharedDebtsEdit, ShoppingListCreate, ShoppingListEdit,
+        ShoppingListShow, TransactionsCreate, TransactionsEdit,
     },
 };
 
@@ -24,6 +24,24 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                // Set the theme class before first paint to avoid a flash.
+                // Mirrored in src/components/layout.rs (ThemeToggle).
+                // An explicit `light` class is kept alongside `dark` so that
+                // non-Leptos consumers (e.g. the map glue) can tell an explicit
+                // light choice apart from an unset one (which falls back to the
+                // OS preference).
+                <script>
+                    (function () {
+                        try {
+                            var stored = localStorage.getItem("splitify-theme");
+                            var dark = stored
+                                ? stored === "dark"
+                                : window.matchMedia("(prefers-color-scheme: dark)").matches;
+                            document.documentElement.classList.toggle("dark", dark);
+                            document.documentElement.classList.toggle("light", !dark);
+                        } catch (e) {}
+                    })();
+                </script>
                 <AutoReload options=options.clone() />
                 <HydrationScripts options/>
                 <MetaTags/>
@@ -48,6 +66,45 @@ pub fn App() -> impl IntoView {
     // Provide user context globally
     provide_context(user_resource);
 
+    // Theme management: a reactive `dark` flag consumed by the navbar toggle.
+    // The initial value comes from the `<html class="dark">` set by the shell's
+    // inline script; toggling it applies the class and persists the choice.
+    let dark_mode = RwSignal::new(false);
+    provide_context(dark_mode);
+
+    #[cfg(feature = "hydrate")]
+    {
+        use leptos::prelude::*;
+
+        let initial_dark = document()
+            .document_element()
+            .map(|element| element.class_list().contains("dark"))
+            .unwrap_or(false);
+        dark_mode.set(initial_dark);
+
+        Effect::new(move |_| {
+            let is_dark = dark_mode.get();
+            if let Some(element) = document().document_element() {
+                // Keep the explicit `light` class in sync alongside `dark` (see
+                // the shell script) so consumers can distinguish an explicit
+                // choice from an unset one.
+                if is_dark {
+                    let _ = element.class_list().add_1("dark");
+                    let _ = element.class_list().remove_1("light");
+                } else {
+                    let _ = element.class_list().remove_1("dark");
+                    let _ = element.class_list().add_1("light");
+                }
+            }
+            if let Some(storage) = web_sys::window()
+                .and_then(|w| w.local_storage().ok())
+                .flatten()
+            {
+                let _ = storage.set_item("splitify-theme", if is_dark { "dark" } else { "light" });
+            }
+        });
+    }
+
     view! {
         // Meta tags for better SEO and appearance
         <Meta name="description" content="Splitify - Split expenses with friends, the Rust way. Fast, secure, and reliable expense tracking."/>
@@ -66,6 +123,10 @@ pub fn App() -> impl IntoView {
 
         // Stylesheet injection
         <Stylesheet id="leptos" href="/pkg/splitify.css"/>
+
+        // MapLibre glue bundle (built by `pnpm build:map`)
+        <Stylesheet id="maplibre" href="/maplibre/map.css"/>
+        <Script src="/maplibre/map.mjs" type_="module"/>
 
         // Document title
         <Title text="Splitify - Split Expenses with Friends"/>
@@ -95,6 +156,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/groups/:id") view=GroupsShow/>
                     <Route path=path!("/groups/:id/edit") view=GroupsEdit/>
                     <Route path=path!("/groups/:id/invites") view=GroupsInvites/>
+                    <Route path=path!("/groups/:id/map") view=GroupMap/>
                     <Route path=path!("/groups/:id/debts/create") view=SharedDebtsCreate/>
                     <Route path=path!("/groups/:id/debts/:debt_id/edit") view=SharedDebtsEdit/>
                     <Route path=path!("/groups/:group_id/shopping-lists/create") view=ShoppingListCreate/>

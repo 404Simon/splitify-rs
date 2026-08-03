@@ -145,26 +145,37 @@ pub fn GroupsShow() -> impl IntoView {
                                                                         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{group.name.clone()}</h1>
                                                                         <p class="text-gray-600 dark:text-gray-400 mt-1">"Group Details"</p>
                                                                     </div>
-                                                    {is_admin.then(|| {
-                                                        let gid = group_id.get_untracked();
-                                                        view! {
-                                                        <div class="flex gap-2">
-                                                            <a
-                                                                href=format!("/groups/{}/invites", gid)
-                                                                class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium transition-colors"
-                                                            >
-                                                                "Manage Invites"
-                                                            </a>
-                                                            <a
-                                                                href=format!("/groups/{}/edit", gid)
-                                                                class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
-                                                            >
-                                                                "Edit Group"
-                                                            </a>
-                                                        </div>
-                                                    }})}
+                                                                    <div class="flex flex-wrap gap-2">
+                                                                        <a
+                                                                            href=move || format!("/groups/{}/map", group_id.get())
+                                                                            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors inline-flex items-center"
+                                                                        >
+                                                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+                                                                            </svg>
+                                                                            "View Map"
+                                                                        </a>
+                                                        {is_admin.then(|| {
+                                                            let gid = group_id.get_untracked();
+                                                            view! {
+                                                                <>
+                                                                    <a
+                                                                        href=format!("/groups/{}/invites", gid)
+                                                                        class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium transition-colors"
+                                                                    >
+                                                                        "Manage Invites"
+                                                                    </a>
+                                                                    <a
+                                                                        href=format!("/groups/{}/edit", gid)
+                                                                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
+                                                                    >
+                                                                        "Edit Group"
+                                                                    </a>
+                                                                </>
+                                                            }
+                                                        })}
+                                                                    </div>
                                                                 </div>
-
                                                                 // Component sections
                                                                 <BalancesSection balances_resource=balances_resource />
                                                                 <MembersSection members_resource=members_resource />

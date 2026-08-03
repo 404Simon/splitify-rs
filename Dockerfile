@@ -28,7 +28,7 @@ RUN rustup target add wasm32-unknown-unknown
 
 WORKDIR /work
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml rollup.config.mjs ./
 RUN corepack enable pnpm && pnpm install --frozen-lockfile
 
 # create dummy src for dependency caching
@@ -47,6 +47,9 @@ COPY src ./src
 COPY style ./style
 COPY public ./public
 COPY migrations ./migrations
+
+# Build the MapLibre bundle (rollup.config.mjs + src/js) into public/maplibre
+RUN pnpm build:map
 
 ENV DATABASE_URL=sqlite:build.db
 RUN sqlx database create && \
