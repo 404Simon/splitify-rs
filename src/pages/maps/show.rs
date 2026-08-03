@@ -38,6 +38,23 @@ fn format_coordinate(value: f64) -> String {
     format!("{value:.5}")
 }
 
+/// Google Maps "directions" URL for a marker, matching the legacy Splitify
+/// behavior (`google.com/maps/dir/?api=1&destination=...`). Opening it on a
+/// phone hands off straight to the Google Maps app. Prefers the saved address,
+/// falling back to the exact coordinates.
+fn google_maps_nav_url(marker: &MapMarker) -> String {
+    let destination = marker
+        .address
+        .clone()
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .unwrap_or_else(|| format!("{},{}", marker.latitude, marker.longitude));
+    format!(
+        "https://www.google.com/maps/dir/?api=1&destination={}",
+        urlencoding::encode(&destination)
+    )
+}
+
 /// Group map page component.
 #[must_use]
 #[component]
@@ -687,6 +704,17 @@ pub fn GroupMap() -> impl IntoView {
                                                                                     "Cancel"
                                                                                 </button>
                                                                             </div>
+                                                                            {move || editing_id.get().map(|id| view! {
+                                                                                <button
+                                                                                    type="button"
+                                                                                    on:click=move |_| {
+                                                                                        delete_action.dispatch(DeleteMapMarker { marker_id: id });
+                                                                                    }
+                                                                                    class="w-full px-4 py-2 rounded-lg font-medium text-sm transition-colors border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                                                                >
+                                                                                    "Delete Location"
+                                                                                </button>
+                                                                            })}
                                                                         </form>
                                                                     </div>
                                                                 })}
@@ -717,7 +745,6 @@ pub fn GroupMap() -> impl IntoView {
                                                                                         marker=marker
                                                                                         can_manage=can_manage
                                                                                         on_edit=start_editing
-                                                                                        on_delete=Callback::new(move |id: i64| { delete_action.dispatch(DeleteMapMarker { marker_id: id }); })
                                                                                     />
                                                                                 </div>
                                                                             }
@@ -794,7 +821,6 @@ pub fn GroupMap() -> impl IntoView {
                                                                                                         is_selected=is_selected
                                                                                                         on_focus=focus_marker
                                                                                                         on_edit=start_editing
-                                                                                                        on_delete=Callback::new(move |id: i64| { delete_action.dispatch(DeleteMapMarker { marker_id: id }); })
                                                                                                     />
                                                                                                 </div>
                                                                                             }
@@ -829,16 +855,13 @@ pub fn GroupMap() -> impl IntoView {
     }
 }
 
-/// Compact card showing a marker's details with edit/delete actions.
+/// Compact card showing a marker's details with edit/navigate actions.
 #[component]
 fn MarkerDetailsCard(
     marker: MapMarker,
     can_manage: bool,
     #[prop(into)] on_edit: Callback<MapMarker>,
-    #[prop(into)] on_delete: Callback<i64>,
 ) -> impl IntoView {
-    let (confirming, set_confirming) = signal(false);
-    let marker_id = marker.id;
     let edit_marker = marker.clone();
 
     view! {
@@ -863,34 +886,28 @@ fn MarkerDetailsCard(
                     <dd>{format!("{}, {}", format_coordinate(marker.latitude), format_coordinate(marker.longitude))}</dd>
                 </div>
             </dl>
-            {can_manage.then(|| view! {
-                <div class="mt-3 flex gap-2">
+            <div class="mt-3 flex gap-2">
+                {can_manage.then(|| view! {
                     <button
                         on:click=move |_| on_edit.run(edit_marker.clone())
-                        class="flex-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
+                        class="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
                     >
                         "Edit"
                     </button>
-                    <button
-                        on:click=move |_| {
-                            if confirming.get() {
-                                on_delete.run(marker_id);
-                            } else {
-                                set_confirming.set(true);
-                            }
-                        }
-                        class="flex-1 px-3 py-1.5 rounded-lg font-medium text-sm transition-colors border"
-                        class:bg-red-600=move || confirming.get()
-                        class:text-white=move || confirming.get()
-                        class:border-red-600=move || confirming.get()
-                        class:border-red-200=move || !confirming.get()
-                        class:text-red-600=move || !confirming.get()
-                        class:hover:bg-red-50=move || !confirming.get()
-                    >
-                        {move || if confirming.get() { "Confirm delete" } else { "Delete" }}
-                    </button>
-                </div>
-            })}
+                })}
+                <a
+                    href=google_maps_nav_url(&marker)
+                    target="_blank"
+                    rel="noopener"
+                    class="flex flex-1 items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    "Navigate"
+                </a>
+            </div>
         </div>
     }
 }
@@ -902,7 +919,7 @@ fn MapBackButton(href: String) -> impl IntoView {
         <a
             href=href
             title="Back to group"
-            class="inline-flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            class="inline-flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -918,7 +935,7 @@ fn MapAddButton(add_mode: RwSignal<bool>, #[prop(into)] on_toggle: Callback<()>)
         <button
             on:click=move |_| on_toggle.run(())
             class=move || format!(
-                "inline-flex items-center gap-2 px-5 py-3 rounded-full font-semibold text-sm shadow-lg transition-colors {}",
+                "inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg font-medium text-sm shadow-sm transition-colors {}",
                 if add_mode.get() {
                     "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
                 } else {
@@ -951,7 +968,7 @@ fn MapFitButton(#[prop(into)] on_click: Callback<()>) -> impl IntoView {
     view! {
         <button
             on:click=move |_| on_click.run(())
-            class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
+            class="inline-flex items-center justify-center h-10 px-4 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-sm transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
         >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
@@ -971,7 +988,7 @@ fn MapListButton(
     view! {
         <button
             on:click=move |_| on_click.run(())
-            class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
+            class="inline-flex items-center justify-center h-10 px-4 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-sm transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
         >
             {move || if open.get() {
                 view! {
@@ -1065,9 +1082,7 @@ fn MarkerCarouselCard(
     is_selected: bool,
     #[prop(into)] on_focus: Callback<i64>,
     #[prop(into)] on_edit: Callback<MapMarker>,
-    #[prop(into)] on_delete: Callback<i64>,
 ) -> impl IntoView {
-    let (confirming, set_confirming) = signal(false);
     let marker_id = marker.id;
     let edit_marker = marker.clone();
 
@@ -1097,38 +1112,32 @@ fn MarkerCarouselCard(
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 font-mono">
                     {format!("{}, {}", format_coordinate(marker.latitude), format_coordinate(marker.longitude))}
                 </p>
-                {can_manage.then(|| view! {
-                    <div class="flex gap-2 mt-auto pt-3">
+                <div class="flex gap-2 mt-auto pt-3">
+                    {can_manage.then(|| view! {
                         <button
                             on:click=move |ev| {
                                 ev.stop_propagation();
                                 on_edit.run(edit_marker.clone());
                             }
-                            class="flex-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
+                            class="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
                         >
                             "Edit"
                         </button>
-                        <button
-                            on:click=move |ev| {
-                                ev.stop_propagation();
-                                if confirming.get() {
-                                    on_delete.run(marker_id);
-                                } else {
-                                    set_confirming.set(true);
-                                }
-                            }
-                            class="flex-1 px-3 py-1.5 rounded-lg font-medium text-sm transition-colors border"
-                            class:bg-red-600=move || confirming.get()
-                            class:text-white=move || confirming.get()
-                            class:border-red-600=move || confirming.get()
-                            class:border-red-200=move || !confirming.get()
-                            class:text-red-600=move || !confirming.get()
-                            class:hover:bg-red-50=move || !confirming.get()
-                        >
-                            {move || if confirming.get() { "Confirm" } else { "Delete" }}
-                        </button>
-                    </div>
-                })}
+                    })}
+                    <a
+                        href=google_maps_nav_url(&marker)
+                        target="_blank"
+                        rel="noopener"
+                        on:click=move |ev| ev.stop_propagation()
+                        class="flex flex-1 items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        "Navigate"
+                    </a>
+                </div>
             </div>
         </div>
     }
