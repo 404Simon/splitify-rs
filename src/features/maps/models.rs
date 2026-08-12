@@ -61,8 +61,12 @@ pub struct MapConfig {
 pub enum MapCommand {
     /// Fit the viewport to the current set of markers.
     Fit,
-    /// Smoothly fly to a coordinate.
-    FlyTo { lng: f64, lat: f64 },
+    /// Smoothly fly to a coordinate, optionally zooming to the given level.
+    FlyTo {
+        lng: f64,
+        lat: f64,
+        zoom: Option<f64>,
+    },
     /// Gently pan to a coordinate without a zoom animation.
     CenterOn { lng: f64, lat: f64 },
 }

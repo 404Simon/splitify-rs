@@ -7,5 +7,5 @@ pub use forms::*;
 pub use layout::*;
 pub use map::{
     EmojiPicker, MapAddButton, MapBackButton, MapCanvas, MapFitButton, MapListButton,
-    MarkerCarousel, MarkerCarouselCard, MarkerDetailsCard, SearchOverlay,
+    MapLocateButton, MarkerCarousel, MarkerCarouselCard, MarkerDetailsCard, SearchOverlay,
 };

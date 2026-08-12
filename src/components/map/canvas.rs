@@ -90,8 +90,8 @@ pub fn MapCanvas(
             if let Some(command) = commands.get() {
                 match command {
                     MapCommand::Fit => maplibre::fit_markers(&command_container),
-                    MapCommand::FlyTo { lng, lat } => {
-                        maplibre::fly_to(&command_container, lng, lat);
+                    MapCommand::FlyTo { lng, lat, zoom } => {
+                        maplibre::fly_to(&command_container, lng, lat, zoom);
                     }
                     MapCommand::CenterOn { lng, lat } => {
                         maplibre::center_on(&command_container, lng, lat);

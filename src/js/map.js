@@ -50,6 +50,32 @@ glueStyles.textContent = `
   .splitify-marker-icon.splitify-marker-active {
     transform: scale(1.5);
   }
+  /* Blue "you are here" dot with a pulsing halo. The marker element itself is
+     positioned by MapLibre via an inline transform, so the pulse lives on the
+     ::after pseudo-child to avoid animating the positioned element. */
+  .splitify-user-location {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    background: #3b82f6;
+    border: 3px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+  }
+  .splitify-user-location::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 9999px;
+    background: rgba(59, 130, 246, 0.25);
+    animation: splitify-locate-pulse 2s ease-out infinite;
+  }
+  @keyframes splitify-locate-pulse {
+    0% { transform: scale(0.4); opacity: 1; }
+    70% { transform: scale(1.5); opacity: 0; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
 `;
 document.head.appendChild(glueStyles);
 
@@ -87,7 +113,7 @@ themeObserver.observe(document.documentElement, {
 const TEMP_PIN_URL =
   "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='30' height='42' viewBox='0 0 24 41'><path fill='%23e11d48' d='M12 0C5.4 0 0 5.4 0 12c0 9 12 29 12 29s12-20 12-29c0-6.6-5.4-12-12-12z'/><circle fill='white' cx='12' cy='12' r='5'/></svg>\")";
 
-/** @type {Map<string, { map: maplibregl.Map, markers: Map<number, maplibregl.Marker>, tempMarker: maplibregl.Marker|null, callbacks: { onMapLoad: Function|null, onMapClick: Function|null, onMarkerClick: Function|null, onTempMarkerMoved: Function|null }, addMode: boolean }>} */
+/** @type {Map<string, { map: maplibregl.Map, markers: Map<number, maplibregl.Marker>, tempMarker: maplibregl.Marker|null, userLocationMarker: maplibregl.Marker|null, callbacks: { onMapLoad: Function|null, onMapClick: Function|null, onMarkerClick: Function|null, onTempMarkerMoved: Function|null }, addMode: boolean }>} */
 const runtimes = new Map();
 
 function runtimeFor(containerId) {
@@ -140,6 +166,7 @@ export function create(containerId, options) {
     style: { light: options.styleUrl, dark: options.darkStyleUrl },
     markers: new Map(),
     tempMarker: null,
+    userLocationMarker: null,
     callbacks: {
       onMapLoad: null,
       onMapClick: null,
@@ -188,6 +215,10 @@ export function destroy(containerId) {
   if (state.tempMarker) {
     state.tempMarker.remove();
     state.tempMarker = null;
+  }
+  if (state.userLocationMarker) {
+    state.userLocationMarker.remove();
+    state.userLocationMarker = null;
   }
   state.map.remove();
   runtimes.delete(containerId);
@@ -330,6 +361,33 @@ export function removeTempMarker(containerId) {
   state.tempMarker = null;
 }
 
+/** Mark (or move) the blue "you are here" dot. */
+export function setUserLocation(containerId, lng, lat) {
+  const state = runtimeFor(containerId);
+  if (!state) return;
+
+  if (state.userLocationMarker) {
+    state.userLocationMarker.setLngLat([lng, lat]);
+    return;
+  }
+
+  const element = document.createElement('div');
+  element.className = 'splitify-user-location';
+  element.setAttribute('aria-label', 'Your location');
+
+  state.userLocationMarker = new Marker({ element })
+    .setLngLat([lng, lat])
+    .addTo(state.map);
+}
+
+/** Remove the blue "you are here" dot. */
+export function removeUserLocation(containerId) {
+  const state = runtimeFor(containerId);
+  if (!state || !state.userLocationMarker) return;
+  state.userLocationMarker.remove();
+  state.userLocationMarker = null;
+}
+
 window.SplitifyMap = {
   create,
   destroy,
@@ -344,4 +402,6 @@ window.SplitifyMap = {
   setAddMode,
   setTempMarker,
   removeTempMarker,
+  setUserLocation,
+  removeUserLocation,
 };

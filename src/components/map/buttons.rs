@@ -71,6 +71,40 @@ pub fn MapFitButton(#[prop(into)] on_click: Callback<()>) -> impl IntoView {
     }
 }
 
+/// Floating "locate me" button — marks the user's position with a blue dot.
+#[component]
+pub fn MapLocateButton(
+    locating: RwSignal<bool>,
+    #[prop(into)] on_click: Callback<()>,
+) -> impl IntoView {
+    view! {
+        <button
+            on:click=move |_| on_click.run(())
+            disabled=move || locating.get()
+            title="Show my location"
+            class="inline-flex items-center justify-center h-10 px-4 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-sm transition-colors shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 disabled:cursor-wait"
+        >
+            {move || if locating.get() {
+                view! {
+                    <svg class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    "Locating"
+                }.into_any()
+            } else {
+                view! {
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+                    </svg>
+                    "Locate"
+                }.into_any()
+            }}
+        </button>
+    }
+}
+
 /// Floating marker list toggle. Shows "Close" while the list is open.
 #[component]
 pub fn MapListButton(

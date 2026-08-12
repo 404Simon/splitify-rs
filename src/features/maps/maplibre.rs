@@ -255,18 +255,19 @@ pub fn fit_markers(container_id: &str) {
     }
 }
 
-/// Smoothly fly the camera to a coordinate.
-pub fn fly_to(container_id: &str, lng: f64, lat: f64) {
+/// Smoothly fly the camera to a coordinate, optionally zooming to a level.
+pub fn fly_to(container_id: &str, lng: f64, lat: f64, zoom: Option<f64>) {
     if let Some(glue) = glue() {
-        let _ = call_method(
-            &glue,
-            "flyTo",
-            &Array::of3(
-                &JsValue::from_str(container_id),
-                &JsValue::from_f64(lng),
-                &JsValue::from_f64(lat),
-            ),
+        let args = Array::of3(
+            &JsValue::from_str(container_id),
+            &JsValue::from_f64(lng),
+            &JsValue::from_f64(lat),
         );
+        args.push(&match zoom {
+            Some(level) => JsValue::from_f64(level),
+            None => JsValue::null(),
+        });
+        let _ = call_method(&glue, "flyTo", &args);
     }
 }
 
@@ -336,6 +337,32 @@ pub fn remove_temp_marker(container_id: &str) {
         let _ = call_method(
             &glue,
             "removeTempMarker",
+            &Array::of1(&JsValue::from_str(container_id)),
+        );
+    }
+}
+
+/// Mark the user's current location with the blue "you are here" dot.
+pub fn set_user_location(container_id: &str, lng: f64, lat: f64) {
+    if let Some(glue) = glue() {
+        let _ = call_method(
+            &glue,
+            "setUserLocation",
+            &Array::of3(
+                &JsValue::from_str(container_id),
+                &JsValue::from_f64(lng),
+                &JsValue::from_f64(lat),
+            ),
+        );
+    }
+}
+
+/// Remove the blue "you are here" dot.
+pub fn remove_user_location(container_id: &str) {
+    if let Some(glue) = glue() {
+        let _ = call_method(
+            &glue,
+            "removeUserLocation",
             &Array::of1(&JsValue::from_str(container_id)),
         );
     }

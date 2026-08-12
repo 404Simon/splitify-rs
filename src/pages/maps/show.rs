@@ -15,8 +15,8 @@ use leptos_router::{
 use crate::{
     components::{
         EmojiPicker, ErrorAlert, LoadingSpinner, MapAddButton, MapBackButton, MapCanvas,
-        MapFitButton, MapListButton, MarkerCarousel, MarkerDetailsCard, Navigation, PageHeader,
-        SearchOverlay,
+        MapFitButton, MapListButton, MapLocateButton, MarkerCarousel, MarkerDetailsCard,
+        Navigation, PageHeader, SearchOverlay,
     },
     features::{
         auth::{UserSession, use_logout},
@@ -90,6 +90,8 @@ pub fn GroupMap() -> impl IntoView {
     let list_open = RwSignal::new(false);
     let error_message = RwSignal::new(None::<String>);
     let commands = RwSignal::new(None::<MapCommand>);
+    // True while the "locate me" button waits for the browser geolocation.
+    let locating = RwSignal::new(false);
 
     // Camera target: the marker the map should center on. A single effect
     // translates it into a gentle `CenterOn` command so every deliberate
@@ -307,6 +309,7 @@ pub fn GroupMap() -> impl IntoView {
         commands.set(Some(MapCommand::FlyTo {
             lng: result.lon,
             lat: result.lat,
+            zoom: None,
         }));
     });
 
@@ -326,6 +329,65 @@ pub fn GroupMap() -> impl IntoView {
         run_search.run(value);
     });
 
+    // "Locate me": query the browser for the user's position, drop the blue
+    // "you are here" dot on the map and fly the camera to it.
+    let on_locate = Callback::new(move |_: ()| {
+        if locating.get_untracked() {
+            return;
+        }
+        locating.set(true);
+        error_message.set(None);
+
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::JsCast;
+            use wasm_bindgen::closure::Closure;
+
+            let Some(geolocation) = web_sys::window()
+                .map(|window| window.navigator())
+                .and_then(|navigator| navigator.geolocation().ok())
+            else {
+                locating.set(false);
+                error_message.set(Some(
+                    "Your browser does not support geolocation".to_string(),
+                ));
+                return;
+            };
+
+            // `once_into_js` deliberately leaks: the success/error callbacks
+            // fire exactly once, so freeing the wasm closure on the way out is
+            // fine for a one-shot request.
+            let on_success = Closure::once_into_js(move |position: web_sys::Position| {
+                let coords = position.coords();
+                let lng = coords.longitude();
+                let lat = coords.latitude();
+                locating.set(false);
+                crate::features::maps::maplibre::set_user_location(MAP_ID, lng, lat);
+                commands.set(Some(MapCommand::FlyTo {
+                    lng,
+                    lat,
+                    zoom: Some(16.0),
+                }));
+            });
+            let on_error = Closure::once_into_js(move |error: web_sys::PositionError| {
+                locating.set(false);
+                error_message.set(Some(format!(
+                    "Could not determine your location: {}",
+                    error.message()
+                )));
+            });
+
+            let _ = geolocation.get_current_position_with_error_callback(
+                on_success.unchecked_ref(),
+                Some(on_error.unchecked_ref()),
+            );
+        }
+        #[cfg(not(feature = "hydrate"))]
+        {
+            locating.set(false);
+        }
+    });
+
     // One gentle pan per camera-target change, shared by every deliberate
     // selection path (map click, list, card tap).
     Effect::new(move |_| {
@@ -342,7 +404,11 @@ pub fn GroupMap() -> impl IntoView {
     // Carousel swipes fly the camera with the zoom animation (same as picking
     // a search result), instead of the gentle pan used for deliberate clicks.
     let carousel_camera = Callback::new(move |(lng, lat): (f64, f64)| {
-        commands.set(Some(MapCommand::FlyTo { lng, lat }));
+        commands.set(Some(MapCommand::FlyTo {
+            lng,
+            lat,
+            zoom: None,
+        }));
     });
 
     // When the mobile carousel opens (or the selection was made outside it —
@@ -530,9 +596,17 @@ pub fn GroupMap() -> impl IntoView {
                                                                             <MapBackButton href=format!("/groups/{gid}") />
                                                                         </div>
                                                                     })}
+                                                                    // Locate/geolocation errors (only visible outside add mode;
+                                                                    // the form shows them too via its own ErrorAlert).
+                                                                    {move || (!add_mode.get() && error_message.get().is_some()).then(|| view! {
+                                                                        <div class="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-[min(90%,24rem)]">
+                                                                            <ErrorAlert message=error_message />
+                                                                        </div>
+                                                                    })}
                                                                     {move || (!add_mode.get()).then(|| view! {
-                                                                        <div class="absolute top-3 right-3 z-10">
+                                                                        <div class="absolute top-3 right-3 z-10 flex flex-col gap-2">
                                                                             <MapFitButton on_click=on_fit />
+                                                                            <MapLocateButton locating=locating on_click=on_locate />
                                                                         </div>
                                                                     })}
                                                                     {move || (!add_mode.get()).then(|| view! {
