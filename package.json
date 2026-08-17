@@ -2,7 +2,7 @@
   "name": "splitify",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.20.0",
+  "packageManager": "pnpm@11.21.0",
   "scripts": {
     "build:map": "NODE_ENV=production rollup -c",
     "watch:map": "rollup -c -w"
@@ -11,7 +11,7 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
-    "maplibre-gl": "6.2.0",
+    "maplibre-gl": "6.3.0",
     "rollup": "^4.62.4",
     "rollup-plugin-postcss": "^4.0.2",
     "tailwindcss": "^4.3.2"
