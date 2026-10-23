@@ -24,6 +24,11 @@ pub async fn toggle_recurring_debt_active(recurring_debt_id: i64) -> Result<bool
 
     let pool = expect_context::<SqlitePool>();
 
-    crate::features::recurring_debts::service::toggle_active(&pool, user.id, recurring_debt_id)
-        .await
+    crate::features::recurring_debts::service::toggle_active(
+        &pool,
+        user.id,
+        recurring_debt_id,
+        None,
+    )
+    .await
 }

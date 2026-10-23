@@ -5,7 +5,9 @@ use axum::{
 use sqlx::SqlitePool;
 
 use super::{error::ApiError, tokens::hash_token};
-use crate::api::tokens::unix_timestamp;
+use crate::api::tokens::{TOKEN_TTL_DAYS, unix_timestamp};
+
+const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
 
 /// Authenticated API user resolved from a `Bearer` token.
 pub struct ApiUser {
@@ -40,7 +42,8 @@ where
             r#"
             SELECT
                 u.id as "id!",
-                u.username as "username!"
+                u.username as "username!",
+                t.expires_at as "expires_at!"
             FROM api_tokens t
             INNER JOIN users u ON u.id = t.user_id
             WHERE t.token_hash = ? AND t.expires_at > ?
@@ -53,9 +56,32 @@ where
 
         let user = user.ok_or_else(|| ApiError::unauthorized("Invalid or expired token"))?;
 
+        // Sliding expiration: keep active clients signed in indefinitely by
+        // extending the token once it has less than `TOKEN_TTL_DAYS - 1` days
+        // left. The CASE keeps this a single UPDATE.
+        let extend_threshold = now + (TOKEN_TTL_DAYS - 1) * SECONDS_PER_DAY;
+        let extended_expiry = now + TOKEN_TTL_DAYS * SECONDS_PER_DAY;
+
+        if user.expires_at < extend_threshold {
+            tracing::debug!(
+                expires_at = user.expires_at,
+                "Extending bearer token expiry"
+            );
+        }
+
         let _ = sqlx::query!(
-            "UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?",
+            r#"
+            UPDATE api_tokens
+            SET last_used_at = ?,
+                expires_at = CASE
+                    WHEN expires_at < ? THEN ?
+                    ELSE expires_at
+                END
+            WHERE token_hash = ?
+            "#,
             now,
+            extend_threshold,
+            extended_expiry,
             token_hash_value
         )
         .execute(&pool)

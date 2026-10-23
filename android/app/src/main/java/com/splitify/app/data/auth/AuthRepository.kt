@@ -3,6 +3,7 @@ package com.splitify.app.data.auth
 import com.splitify.app.data.dto.AuthResponseDto
 import com.splitify.app.data.dto.LoginRequest
 import com.splitify.app.data.dto.RegisterRequest
+import com.splitify.app.data.cache.LocalStore
 import com.splitify.app.data.dto.UserDto
 import com.splitify.app.data.network.ApiClient
 import com.splitify.app.data.network.apiResult
@@ -11,12 +12,13 @@ import kotlinx.coroutines.flow.Flow
 
 class AuthRepository(
     private val api: ApiClient,
-    private val tokenStore: TokenStore,
+    private val session: SessionManager,
+    private val localStore: LocalStore,
 ) {
 
-    val token: Flow<String?> = tokenStore.token
+    val token: Flow<String?> = session.token
 
-    val username: Flow<String?> = tokenStore.username
+    val user: Flow<UserDto?> = session.user
 
     suspend fun login(username: String, password: String): Result<UserDto> = apiResult {
         val response = api.post(
@@ -26,38 +28,49 @@ class AuthRepository(
             serializer = AuthResponseDto.serializer(),
             authenticated = false,
         )
-        tokenStore.save(response.token, response.user.username)
+        session.save(response.token, response.user)
+        localStore.onUserChanged(response.user.id)
         response.user
     }
 
-    suspend fun register(username: String, password: String, email: String?): Result<UserDto> = apiResult {
-        val response = api.post(
-            path = "auth/register",
-            body = RegisterRequest(username = username, password = password, email = email),
-            bodySerializer = RegisterRequest.serializer(),
-            serializer = AuthResponseDto.serializer(),
-            authenticated = false,
-        )
-        tokenStore.save(response.token, response.user.username)
-        response.user
-    }
+    suspend fun register(username: String, password: String, email: String?): Result<UserDto> =
+        apiResult {
+            val response = api.post(
+                path = "auth/register",
+                body = RegisterRequest(username = username, password = password, email = email),
+                bodySerializer = RegisterRequest.serializer(),
+                serializer = AuthResponseDto.serializer(),
+                authenticated = false,
+            )
+            session.save(response.token, response.user)
+            localStore.onUserChanged(response.user.id)
+            response.user
+        }
 
     suspend fun me(): Result<UserDto> = apiResult {
-        api.get("auth/me", UserDto.serializer())
+        val user = api.get("auth/me", UserDto.serializer())
+        session.updateUser(user)
+        localStore.onUserChanged(user.id)
+        user
     }
 
+    /**
+     * Clears the local session immediately so logout works offline, then tries
+     * to revoke the token on the server. A failed revoke is harmless: the token
+     * expires on the server anyway.
+     */
     suspend fun logout() {
-        try {
-            api.postNoContent("auth/logout")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            // Local session is cleared regardless of the server response.
+        val token = session.token.value
+        session.clear()
+        if (token != null) {
+            try {
+                api.postNoContentWithToken("auth/logout", token)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Local session is already gone.
+            }
         }
-        tokenStore.clear()
     }
 
-    suspend fun clearSession() {
-        tokenStore.clear()
-    }
 }

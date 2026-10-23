@@ -23,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,7 +36,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -59,27 +57,33 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.dto.InviteListItemDto
 import com.splitify.app.data.invites.InviteRepository
-import com.splitify.app.data.network.ApiException
 import com.splitify.app.data.network.userMessage
-import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class InvitesUiState(
     val invites: List<InviteListItemDto> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null,
-    val forbidden: Boolean = false,
+    val isCreator: Boolean = true,
     val showCreateDialog: Boolean = false,
     val isCreating: Boolean = false,
     val createError: String? = null,
     val deleteTarget: InviteListItemDto? = null,
     val isDeleting: Boolean = false,
-)
+    val deleteError: String? = null,
+) {
+    /**
+     * The list is populated from the cached group snapshot, so members see any
+     * invites already cached. Only an empty list on a member's device falls back
+     * to the creator-only message (the server returns 403 for members).
+     */
+    val creatorOnly: Boolean get() = !isCreator && invites.isEmpty()
+}
 
 class InvitesViewModel(
     private val groupId: Long,
@@ -90,32 +94,25 @@ class InvitesViewModel(
     private val _uiState = MutableStateFlow(InvitesUiState())
     val uiState: StateFlow<InvitesUiState> = _uiState.asStateFlow()
 
-    fun load() {
+    init {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, forbidden = false) }
-            inviteRepository.listGroupInvites(groupId)
-                .onSuccess { invites ->
-                    _uiState.update {
-                        it.copy(invites = invites, isLoading = false, forbidden = false)
-                    }
+            combine(
+                inviteRepository.observeInvites(groupId),
+                inviteRepository.observeCreatorId(groupId),
+                authRepository.user,
+            ) { invites, creatorId, user ->
+                Triple(invites, creatorId, user?.id)
+            }.collect { (invites, creatorId, currentUserId) ->
+                _uiState.update {
+                    it.copy(
+                        invites = invites,
+                        isLoading = false,
+                        isCreator = creatorId == null ||
+                            currentUserId == null ||
+                            creatorId == currentUserId,
+                    )
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    if (error is ApiException.Http && error.statusCode == 403) {
-                        _uiState.update {
-                            it.copy(
-                                invites = emptyList(),
-                                isLoading = false,
-                                error = null,
-                                forbidden = true,
-                            )
-                        }
-                    } else {
-                        _uiState.update {
-                            it.copy(isLoading = false, error = error.userMessage())
-                        }
-                    }
-                }
+            }
         }
     }
 
@@ -152,6 +149,7 @@ class InvitesViewModel(
                 durationDays = validDays.toLong(),
             )
                 .onSuccess {
+                    // Online-only call: the sync engine refreshes the cached snapshot.
                     _uiState.update {
                         it.copy(
                             isCreating = false,
@@ -159,10 +157,8 @@ class InvitesViewModel(
                             createError = null,
                         )
                     }
-                    load()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
                         it.copy(isCreating = false, createError = error.userMessage())
                     }
@@ -171,40 +167,30 @@ class InvitesViewModel(
     }
 
     fun requestDelete(invite: InviteListItemDto) {
-        _uiState.update { it.copy(deleteTarget = invite) }
+        _uiState.update { it.copy(deleteTarget = invite, deleteError = null) }
     }
 
     fun dismissDelete() {
         if (_uiState.value.isDeleting) return
-        _uiState.update { it.copy(deleteTarget = null) }
+        _uiState.update { it.copy(deleteTarget = null, deleteError = null) }
     }
 
     fun confirmDelete() {
         val target = _uiState.value.deleteTarget ?: return
         if (_uiState.value.isDeleting) return
-        _uiState.update { it.copy(isDeleting = true) }
+        _uiState.update { it.copy(isDeleting = true, deleteError = null) }
         viewModelScope.launch {
             inviteRepository.deleteInvite(groupId, target.uuid)
                 .onSuccess {
-                    _uiState.update { it.copy(isDeleting = false, deleteTarget = null) }
-                    load()
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
-                        it.copy(
-                            isDeleting = false,
-                            deleteTarget = null,
-                            error = error.userMessage(),
-                        )
+                        it.copy(isDeleting = false, deleteTarget = null, deleteError = null)
                     }
                 }
-        }
-    }
-
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(isDeleting = false, deleteError = error.userMessage())
+                    }
+                }
         }
     }
 
@@ -232,58 +218,42 @@ fun InvitesTab(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) { viewModel.load() }
-
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             state.isLoading && state.invites.isEmpty() ->
                 LoadingScreen(message = "Loading invites…")
 
-            state.forbidden -> CenteredInviteMessage(
+            state.creatorOnly -> CenteredInviteMessage(
                 title = "Creator only",
                 message = "Only the group creator can manage invites.",
                 icon = { Icon(Icons.Default.Lock, contentDescription = null) },
             )
 
-            state.error != null && state.invites.isEmpty() -> CenteredInviteError(
-                message = state.error.orEmpty(),
-                onRetry = { viewModel.load() },
-            )
-
             state.invites.isEmpty() -> EmptyInvites(onCreate = { viewModel.openCreate() })
 
-            else -> Column(modifier = Modifier.fillMaxSize()) {
-                state.error?.let { message ->
-                    ErrorBanner(
-                        message = message,
-                        onRetry = { viewModel.load() },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    bottom = 96.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(state.invites, key = { it.uuid }) { invite ->
+                    InviteCard(
+                        invite = invite,
+                        link = inviteRepository.inviteLink(invite.uuid),
+                        onCopy = { link -> copyInviteLink(context, link) },
+                        onShare = { link -> shareInviteLink(context, link) },
+                        onRevoke = { viewModel.requestDelete(invite) },
                     )
-                }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
-                        bottom = 96.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(state.invites, key = { it.uuid }) { invite ->
-                        InviteCard(
-                            invite = invite,
-                            link = inviteRepository.inviteLink(invite.uuid),
-                            onCopy = { link -> copyInviteLink(context, link) },
-                            onShare = { link -> shareInviteLink(context, link) },
-                            onRevoke = { viewModel.requestDelete(invite) },
-                        )
-                    }
                 }
             }
         }
 
-        if (!state.forbidden && (!state.isLoading || state.invites.isNotEmpty())) {
+        if (!state.creatorOnly && (!state.isLoading || state.invites.isNotEmpty())) {
             ExtendedFloatingActionButton(
                 onClick = { viewModel.openCreate() },
                 modifier = Modifier
@@ -311,10 +281,19 @@ fun InvitesTab(
             onDismissRequest = { viewModel.dismissDelete() },
             title = { Text("Revoke invite") },
             text = {
-                Text(
-                    "Revoke \"${invite.name ?: "this invite"}\"? " +
-                        "The link will stop working immediately.",
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Revoke \"${invite.name ?: "this invite"}\"? " +
+                            "The link will stop working immediately.",
+                    )
+                    state.deleteError?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
@@ -466,28 +445,6 @@ private fun CenteredInviteMessage(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-    }
-}
-
-@Composable
-private fun CenteredInviteError(
-    message: String,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-        Spacer(Modifier.height(12.dp))
-        ErrorBanner(message = message, onRetry = onRetry)
     }
 }
 

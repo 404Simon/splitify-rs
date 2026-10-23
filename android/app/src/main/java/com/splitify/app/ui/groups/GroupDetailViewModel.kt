@@ -5,14 +5,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.splitify.app.data.auth.AuthRepository
+import com.splitify.app.data.auth.SessionManager
 import com.splitify.app.data.dto.GroupDto
 import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.groups.GroupRepository
-import com.splitify.app.data.network.ApiException
-import com.splitify.app.data.network.userMessage
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,63 +23,72 @@ data class GroupDetailUiState(
     val error: String? = null,
 )
 
+/**
+ * Group detail is rendered entirely from the local snapshot cache. The current
+ * user comes from [SessionManager], so no `/auth/me` round trip is needed.
+ */
 class GroupDetailViewModel(
     private val groupId: Long,
     private val groupRepository: GroupRepository,
-    private val authRepository: AuthRepository,
+    session: SessionManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GroupDetailUiState())
     val uiState: StateFlow<GroupDetailUiState> = _uiState.asStateFlow()
 
     init {
-        load()
-    }
-
-    fun load() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            coroutineScope {
-                val groupDeferred = async { groupRepository.getGroup(groupId) }
-                val membersDeferred = async { groupRepository.getMembers(groupId) }
-                val userDeferred = async { authRepository.me() }
-                val groupResult = groupDeferred.await()
-                val membersResult = membersDeferred.await()
-                val userResult = userDeferred.await()
-                val failure = groupResult.exceptionOrNull()
-                    ?: membersResult.exceptionOrNull()
-                    ?: userResult.exceptionOrNull()
+            session.user.collect { user ->
+                _uiState.update { it.copy(currentUserId = user?.id) }
+            }
+        }
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                groupRepository.observeGroup(groupId),
+                groupRepository.isLoaded,
+            ) { group, loaded ->
+                group to loaded
+            }.collect { (group, loaded) ->
+                _uiState.update { state ->
+                    when {
+                        group != null -> state.copy(group = group, isLoading = false, error = null)
 
-                if (failure != null) {
-                    handleUnauthorized(failure)
-                    _uiState.update { it.copy(isLoading = false, error = failure.userMessage()) }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            group = groupResult.getOrNull(),
-                            members = membersResult.getOrDefault(emptyList()),
-                            currentUserId = userResult.getOrNull()?.id,
+                        !loaded -> state.copy(isLoading = true)
+
+                        state.group != null -> state.copy(
+                            group = null,
                             isLoading = false,
+                            error = "This group is no longer available.",
+                        )
+
+                        else -> state.copy(
+                            isLoading = false,
+                            error = "This group isn't available offline yet.",
                         )
                     }
                 }
             }
         }
+        viewModelScope.launch {
+            groupRepository.observeMembers(groupId).collect { members ->
+                _uiState.update { it.copy(members = members) }
+            }
+        }
+        load()
     }
 
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
-        }
+    /** Requests a background refresh; cached data stays visible. */
+    fun load() {
+        groupRepository.refresh()
     }
 
     companion object {
         fun factory(
             groupId: Long,
             groupRepository: GroupRepository,
-            authRepository: AuthRepository,
+            session: SessionManager,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { GroupDetailViewModel(groupId, groupRepository, authRepository) }
+            initializer { GroupDetailViewModel(groupId, groupRepository, session) }
         }
     }
 }

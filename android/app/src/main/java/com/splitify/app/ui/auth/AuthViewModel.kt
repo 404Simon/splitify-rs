@@ -6,8 +6,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.splitify.app.data.auth.AuthRepository
+import com.splitify.app.data.auth.SessionManager
 import com.splitify.app.data.dto.UserDto
-import com.splitify.app.data.network.ApiException
 import com.splitify.app.data.network.userMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,23 +29,25 @@ data class AuthUiState(
     val error: String? = null,
 )
 
-class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
+class AuthViewModel(
+    private val authRepository: AuthRepository,
+    private val sessionManager: SessionManager,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            authRepository.token.collect { token ->
-                val current = _uiState.value
-                when {
-                    token == null ->
-                        _uiState.update { it.copy(session = SessionState.Unauthenticated) }
-
-                    current.isSubmitting || current.session is SessionState.Authenticated -> Unit
-
-                    else -> checkSession()
-                }
+            sessionManager.awaitReady()
+            restoreSession()
+        }
+        // A token that disappears (logout, or a 401 handled by ApiClient) always
+        // ends the session, even if a background refresh is still in flight.
+        viewModelScope.launch {
+            sessionManager.awaitReady()
+            sessionManager.token.collect { token ->
+                if (token == null) setSession(SessionState.Unauthenticated)
             }
         }
     }
@@ -80,20 +82,44 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         _uiState.update { it.copy(error = null) }
     }
 
-    private suspend fun checkSession() {
-        _uiState.update { it.copy(session = SessionState.Checking) }
+    /**
+     * Offline-first restore: a cached token plus cached profile is enough to render
+     * the app. The profile is then refreshed in the background, and only a real
+     * `401` (handled centrally by `ApiClient.onUnauthorized`) ends the session.
+     */
+    private suspend fun restoreSession() {
+        if (sessionManager.token.value == null) {
+            setSession(SessionState.Unauthenticated)
+            return
+        }
+
+        val cachedUser = sessionManager.user.value
+        if (cachedUser == null) {
+            // Without a cached profile there is nothing to render, so this path
+            // has to wait for the server and fails closed.
+            setSession(
+                authRepository.me().fold(
+                    onSuccess = { SessionState.Authenticated(it) },
+                    onFailure = { SessionState.Unauthenticated },
+                ),
+            )
+            return
+        }
+
+        setSession(SessionState.Authenticated(cachedUser))
+        validateSession()
+    }
+
+    private suspend fun validateSession() {
         authRepository.me()
             .onSuccess { user ->
-                _uiState.update { it.copy(session = SessionState.Authenticated(user)) }
-            }
-            .onFailure { error ->
-                if (error is ApiException.Http && error.isUnauthorized) {
-                    authRepository.clearSession()
-                }
-                _uiState.update {
-                    it.copy(session = SessionState.Unauthenticated, error = error.userMessage())
+                if (sessionManager.token.value != null) {
+                    setSession(SessionState.Authenticated(user))
                 }
             }
+            // Network failures keep the cached session, otherwise an offline launch
+            // would sign the user out. A 401 already cleared the token (and this
+            // ViewModel observes that through the token flow).
     }
 
     private fun submit(action: suspend () -> Result<UserDto>) {
@@ -118,6 +144,10 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
+    private fun setSession(session: SessionState) {
+        _uiState.update { it.copy(session = session) }
+    }
+
     private fun setError(message: String) {
         _uiState.update { it.copy(error = message) }
     }
@@ -125,8 +155,11 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
     companion object {
         private val USERNAME_PATTERN = Regex("^[\\p{L}\\p{N}_-]{3,50}$")
 
-        fun factory(authRepository: AuthRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { AuthViewModel(authRepository) }
+        fun factory(
+            authRepository: AuthRepository,
+            sessionManager: SessionManager,
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer { AuthViewModel(authRepository, sessionManager) }
         }
     }
 }

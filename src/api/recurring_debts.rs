@@ -1,5 +1,6 @@
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
@@ -35,6 +36,11 @@ pub struct UpdateRecurringDebtRequest {
 #[derive(Serialize)]
 pub struct CreatedResponse {
     pub id: i64,
+}
+
+#[derive(Deserialize)]
+pub struct ToggleRecurringDebtRequest {
+    pub is_active: bool,
 }
 
 #[derive(Serialize)]
@@ -148,10 +154,24 @@ async fn toggle_recurring_debt(
     Path(recurring_debt_id): Path<i64>,
     State(pool): State<SqlitePool>,
     user: ApiUser,
+    body: Bytes,
 ) -> Result<Json<ToggleResponse>, ApiError> {
-    let is_active =
-        crate::features::recurring_debts::service::toggle_active(&pool, user.id, recurring_debt_id)
-            .await?;
+    let desired = if body.is_empty() {
+        None
+    } else {
+        let payload: ToggleRecurringDebtRequest = serde_json::from_slice(&body)
+            .map_err(|error| ApiError::bad_request(format!("Invalid request body: {error}")))?;
+        Some(payload.is_active)
+    };
+
+    let is_active = crate::features::recurring_debts::service::toggle_active(
+        &pool,
+        user.id,
+        recurring_debt_id,
+        desired,
+    )
+    .await?;
+
     Ok(Json(ToggleResponse { is_active }))
 }
 

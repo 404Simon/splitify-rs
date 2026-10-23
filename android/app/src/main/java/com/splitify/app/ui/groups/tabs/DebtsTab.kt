@@ -36,7 +36,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,21 +55,17 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.debts.DebtRepository
 import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.dto.SharedDebtDto
 import com.splitify.app.data.dto.UserShareDto
-import com.splitify.app.data.network.ApiException
 import com.splitify.app.data.network.userMessage
 import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -80,45 +75,38 @@ data class DebtsUiState(
     val debts: List<SharedDebtDto> = emptyList(),
     val shares: Map<Long, List<UserShareDto>> = emptyMap(),
     val isLoading: Boolean = true,
-    val error: String? = null,
+    val actionError: String? = null,
     val showFormDialog: Boolean = false,
     val editingDebtId: Long? = null,
     val isSaving: Boolean = false,
     val formError: String? = null,
     val deleteTarget: SharedDebtDto? = null,
-    val isDeleting: Boolean = false,
 )
 
 class DebtsViewModel(
     private val groupId: Long,
     private val debtRepository: DebtRepository,
-    private val authRepository: AuthRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DebtsUiState())
     val uiState: StateFlow<DebtsUiState> = _uiState.asStateFlow()
 
-    fun load() {
+    init {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            debtRepository.listDebts(groupId)
-                .onSuccess { debts ->
-                    val shares = coroutineScope {
-                        debts.map { debt ->
-                            async {
-                                debt.id to debtRepository.getDebtShares(debt.id).getOrDefault(emptyList())
-                            }
-                        }.awaitAll().toMap()
-                    }
+            combine(
+                debtRepository.observeDebts(groupId),
+                debtRepository.observeShares(groupId),
+            ) { debts, shares -> debts to shares }
+                .collect { (debts, shares) ->
                     _uiState.update {
                         it.copy(debts = debts, shares = shares, isLoading = false)
                     }
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update { it.copy(isLoading = false, error = error.userMessage()) }
-                }
         }
+    }
+
+    fun dismissActionError() {
+        _uiState.update { it.copy(actionError = null) }
     }
 
     fun openCreate() {
@@ -157,9 +145,20 @@ class DebtsViewModel(
         viewModelScope.launch {
             val editingId = _uiState.value.editingDebtId
             val result: Result<Unit> = if (editingId != null) {
-                debtRepository.updateDebt(editingId, trimmedName, trimmedAmount, memberIds)
+                debtRepository.updateDebt(
+                    groupId = groupId,
+                    debtId = editingId,
+                    name = trimmedName,
+                    amount = trimmedAmount,
+                    memberIds = memberIds,
+                )
             } else {
-                debtRepository.createDebt(groupId, trimmedName, trimmedAmount, memberIds).map { }
+                debtRepository.createDebt(
+                    groupId = groupId,
+                    name = trimmedName,
+                    amount = trimmedAmount,
+                    memberIds = memberIds,
+                ).map { }
             }
             result
                 .onSuccess {
@@ -171,10 +170,8 @@ class DebtsViewModel(
                             formError = null,
                         )
                     }
-                    load()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
                         it.copy(isSaving = false, formError = error.userMessage())
                     }
@@ -187,36 +184,19 @@ class DebtsViewModel(
     }
 
     fun dismissDelete() {
-        if (_uiState.value.isDeleting) return
         _uiState.update { it.copy(deleteTarget = null) }
     }
 
     fun confirmDelete() {
         val target = _uiState.value.deleteTarget ?: return
-        if (_uiState.value.isDeleting) return
-        _uiState.update { it.copy(isDeleting = true) }
+        // The cached list is the source of truth, so the dialog can close before the
+        // local write completes and no server round-trip is involved.
+        _uiState.update { it.copy(deleteTarget = null) }
         viewModelScope.launch {
-            debtRepository.deleteDebt(target.id)
-                .onSuccess {
-                    _uiState.update { it.copy(isDeleting = false, deleteTarget = null) }
-                    load()
-                }
+            debtRepository.deleteDebt(groupId, target.id)
                 .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            isDeleting = false,
-                            deleteTarget = null,
-                            error = error.userMessage(),
-                        )
-                    }
+                    _uiState.update { it.copy(actionError = error.userMessage()) }
                 }
-        }
-    }
-
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
         }
     }
 
@@ -224,9 +204,8 @@ class DebtsViewModel(
         fun factory(
             groupId: Long,
             debtRepository: DebtRepository,
-            authRepository: AuthRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { DebtsViewModel(groupId, debtRepository, authRepository) }
+            initializer { DebtsViewModel(groupId, debtRepository) }
         }
     }
 }
@@ -236,32 +215,24 @@ fun DebtsTab(
     groupId: Long,
     members: List<GroupMemberDto>,
     debtRepository: DebtRepository,
-    authRepository: AuthRepository,
 ) {
     val viewModel: DebtsViewModel = viewModel(
         key = "debts-$groupId",
-        factory = DebtsViewModel.factory(groupId, debtRepository, authRepository),
+        factory = DebtsViewModel.factory(groupId, debtRepository),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { viewModel.load() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             state.isLoading && state.debts.isEmpty() -> LoadingScreen(message = "Loading debts…")
 
-            state.error != null && state.debts.isEmpty() -> TabError(
-                message = state.error.orEmpty(),
-                onRetry = { viewModel.load() },
-            )
-
             state.debts.isEmpty() -> EmptyDebts(onCreate = { viewModel.openCreate() })
 
             else -> Column(modifier = Modifier.fillMaxSize()) {
-                state.error?.let { message ->
+                state.actionError?.let { message ->
                     ErrorBanner(
                         message = message,
-                        onRetry = { viewModel.load() },
+                        onDismiss = { viewModel.dismissActionError() },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
@@ -324,22 +295,12 @@ fun DebtsTab(
             title = { Text("Delete debt") },
             text = { Text("Delete \"${debt.name}\"? This cannot be undone.") },
             confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmDelete() },
-                    enabled = !state.isDeleting,
-                ) {
-                    if (state.isDeleting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
+                TextButton(onClick = { viewModel.confirmDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissDelete() }, enabled = !state.isDeleting) {
+                TextButton(onClick = { viewModel.dismissDelete() }) {
                     Text("Cancel")
                 }
             },
@@ -432,21 +393,6 @@ private fun EmptyDebts(onCreate: () -> Unit) {
         Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
             Text("Add debt")
         }
-    }
-}
-
-@Composable
-private fun TabError(
-    message: String,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        ErrorBanner(message = message, onRetry = onRetry)
     }
 }
 

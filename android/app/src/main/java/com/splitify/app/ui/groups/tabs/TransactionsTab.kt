@@ -34,12 +34,11 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,10 +57,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.dto.TransactionDto
-import com.splitify.app.data.network.ApiException
 import com.splitify.app.data.network.userMessage
 import com.splitify.app.data.transactions.TransactionRepository
 import com.splitify.app.ui.components.ErrorBanner
@@ -77,38 +74,34 @@ private val TransactionAmountPattern = Regex("""^\d+(\.\d{1,2})?$""")
 data class TransactionsUiState(
     val transactions: List<TransactionDto> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null,
+    val actionError: String? = null,
     val showFormDialog: Boolean = false,
     val editingTransactionId: Long? = null,
     val isSaving: Boolean = false,
     val formError: String? = null,
     val deleteTarget: TransactionDto? = null,
-    val isDeleting: Boolean = false,
 )
 
 class TransactionsViewModel(
     private val groupId: Long,
     private val transactionRepository: TransactionRepository,
-    private val authRepository: AuthRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TransactionsUiState())
     val uiState: StateFlow<TransactionsUiState> = _uiState.asStateFlow()
 
-    fun load() {
+    init {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            transactionRepository.listTransactions(groupId)
-                .onSuccess { transactions ->
-                    _uiState.update {
-                        it.copy(transactions = transactions, isLoading = false)
-                    }
+            transactionRepository.observeTransactions(groupId).collect { transactions ->
+                _uiState.update {
+                    it.copy(transactions = transactions, isLoading = false)
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update { it.copy(isLoading = false, error = error.userMessage()) }
-                }
+            }
         }
+    }
+
+    fun dismissActionError() {
+        _uiState.update { it.copy(actionError = null) }
     }
 
     fun openCreate() {
@@ -155,6 +148,7 @@ class TransactionsViewModel(
             val editingId = _uiState.value.editingTransactionId
             val result: Result<Unit> = if (editingId != null) {
                 transactionRepository.updateTransaction(
+                    groupId = groupId,
                     transactionId = editingId,
                     recipientId = targetRecipientId,
                     amount = trimmedAmount,
@@ -178,10 +172,8 @@ class TransactionsViewModel(
                             formError = null,
                         )
                     }
-                    load()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
                         it.copy(isSaving = false, formError = error.userMessage())
                     }
@@ -194,36 +186,19 @@ class TransactionsViewModel(
     }
 
     fun dismissDelete() {
-        if (_uiState.value.isDeleting) return
         _uiState.update { it.copy(deleteTarget = null) }
     }
 
     fun confirmDelete() {
         val target = _uiState.value.deleteTarget ?: return
-        if (_uiState.value.isDeleting) return
-        _uiState.update { it.copy(isDeleting = true) }
+        // Local-first: the cached list is the source of truth, so the dialog closes
+        // before the local write finishes and nothing waits for the server.
+        _uiState.update { it.copy(deleteTarget = null) }
         viewModelScope.launch {
-            transactionRepository.deleteTransaction(target.id)
-                .onSuccess {
-                    _uiState.update { it.copy(isDeleting = false, deleteTarget = null) }
-                    load()
-                }
+            transactionRepository.deleteTransaction(groupId, target.id)
                 .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            isDeleting = false,
-                            deleteTarget = null,
-                            error = error.userMessage(),
-                        )
-                    }
+                    _uiState.update { it.copy(actionError = error.userMessage()) }
                 }
-        }
-    }
-
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
         }
     }
 
@@ -231,11 +206,8 @@ class TransactionsViewModel(
         fun factory(
             groupId: Long,
             transactionRepository: TransactionRepository,
-            authRepository: AuthRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                TransactionsViewModel(groupId, transactionRepository, authRepository)
-            }
+            initializer { TransactionsViewModel(groupId, transactionRepository) }
         }
     }
 }
@@ -246,15 +218,12 @@ fun TransactionsTab(
     members: List<GroupMemberDto>,
     currentUserId: Long?,
     transactionRepository: TransactionRepository,
-    authRepository: AuthRepository,
 ) {
     val viewModel: TransactionsViewModel = viewModel(
         key = "transactions-$groupId",
-        factory = TransactionsViewModel.factory(groupId, transactionRepository, authRepository),
+        factory = TransactionsViewModel.factory(groupId, transactionRepository),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { viewModel.load() }
 
     val recipients = members.filter { it.id != currentUserId }
 
@@ -263,19 +232,14 @@ fun TransactionsTab(
             state.isLoading && state.transactions.isEmpty() ->
                 LoadingScreen(message = "Loading transactions…")
 
-            state.error != null && state.transactions.isEmpty() -> TabError(
-                message = state.error.orEmpty(),
-                onRetry = { viewModel.load() },
-            )
-
             state.transactions.isEmpty() ->
                 EmptyTransactions(onCreate = { viewModel.openCreate() })
 
             else -> Column(modifier = Modifier.fillMaxSize()) {
-                state.error?.let { message ->
+                state.actionError?.let { message ->
                     ErrorBanner(
                         message = message,
-                        onRetry = { viewModel.load() },
+                        onDismiss = { viewModel.dismissActionError() },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
@@ -344,22 +308,12 @@ fun TransactionsTab(
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmDelete() },
-                    enabled = !state.isDeleting,
-                ) {
-                    if (state.isDeleting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
+                TextButton(onClick = { viewModel.confirmDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissDelete() }, enabled = !state.isDeleting) {
+                TextButton(onClick = { viewModel.dismissDelete() }) {
                     Text("Cancel")
                 }
             },
@@ -455,21 +409,6 @@ private fun EmptyTransactions(onCreate: () -> Unit) {
     }
 }
 
-@Composable
-private fun TabError(
-    message: String,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        ErrorBanner(message = message, onRetry = onRetry)
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TransactionFormDialog(
@@ -518,7 +457,7 @@ private fun TransactionFormDialog(
                             )
                         },
                         modifier = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
                     )
                     ExposedDropdownMenu(

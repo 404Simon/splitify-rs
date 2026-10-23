@@ -508,11 +508,15 @@ pub async fn delete(
 }
 
 /// Toggle a recurring debt's active state (creator only).
+///
+/// When `desired` is provided the call becomes idempotent: an already-matching
+/// state is a no-op that performs no update.
 #[cfg(feature = "ssr")]
 pub async fn toggle_active(
     pool: &SqlitePool,
     user_id: i64,
     recurring_debt_id: i64,
+    desired: Option<bool>,
 ) -> Result<bool, ServerFnError> {
     let debt = sqlx::query!(
         r#"
@@ -533,7 +537,12 @@ pub async fn toggle_active(
         ));
     }
 
-    let new_status = !debt.is_active;
+    let current_status = debt.is_active;
+    let new_status = desired.unwrap_or(!current_status);
+
+    if new_status == current_status {
+        return Ok(current_status);
+    }
 
     sqlx::query!(
         "UPDATE recurring_debts SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",

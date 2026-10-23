@@ -1,5 +1,6 @@
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, patch, post},
@@ -35,6 +36,11 @@ pub struct ItemRequest {
 #[derive(Serialize)]
 pub struct IdResponse {
     pub id: i64,
+}
+
+#[derive(Deserialize)]
+pub struct ToggleItemRequest {
+    pub is_completed: bool,
 }
 
 #[derive(Serialize)]
@@ -176,13 +182,23 @@ async fn toggle_item(
     State(pool): State<SqlitePool>,
     State(broadcaster): State<EventBroadcaster>,
     user: ApiUser,
+    body: Bytes,
 ) -> Result<Json<ToggleItemResponse>, ApiError> {
+    let desired = if body.is_empty() {
+        None
+    } else {
+        let payload: ToggleItemRequest = serde_json::from_slice(&body)
+            .map_err(|error| ApiError::bad_request(format!("Invalid request body: {error}")))?;
+        Some(payload.is_completed)
+    };
+
     let is_completed = crate::features::shopping_lists::service::toggle_item(
         &pool,
         user.id,
         &broadcaster,
         list_id,
         item_id,
+        desired,
     )
     .await?;
 

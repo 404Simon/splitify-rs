@@ -42,7 +42,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,25 +61,22 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.dto.CreateRecurringDebtRequest
 import com.splitify.app.data.dto.GeneratedInstanceDto
 import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.dto.RecurringDebtDto
 import com.splitify.app.data.dto.RecurringDebtMemberDto
 import com.splitify.app.data.dto.UpdateRecurringDebtRequest
-import com.splitify.app.data.network.ApiException
 import com.splitify.app.data.network.userMessage
 import com.splitify.app.data.recurring.RecurringDebtRepository
 import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
 import java.time.LocalDate
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import java.time.ZoneOffset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -94,10 +90,11 @@ private val Frequencies = listOf(
 )
 private val FrequencyValues = Frequencies.map { it.first }.toSet()
 
-private data class RecurringDebtDetails(
-    val shares: List<RecurringDebtMemberDto>,
-    val instances: List<GeneratedInstanceDto>,
-    val memberIds: List<Long>,
+private data class RecurringDebtSnapshotView(
+    val debts: List<RecurringDebtDto>,
+    val shares: Map<Long, List<RecurringDebtMemberDto>>,
+    val instances: Map<Long, List<GeneratedInstanceDto>>,
+    val memberIds: Map<Long, List<Long>>,
 )
 
 data class RecurringDebtsUiState(
@@ -116,59 +113,57 @@ data class RecurringDebtsUiState(
     val togglingIds: Set<Long> = emptySet(),
     val generatingIds: Set<Long> = emptySet(),
     val deleteTarget: RecurringDebtDto? = null,
-    val isDeleting: Boolean = false,
 )
 
 class RecurringDebtsViewModel(
     private val groupId: Long,
     private val recurringDebtRepository: RecurringDebtRepository,
-    private val authRepository: AuthRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecurringDebtsUiState())
     val uiState: StateFlow<RecurringDebtsUiState> = _uiState.asStateFlow()
 
-    fun load() {
+    init {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            recurringDebtRepository.listRecurringDebts(groupId)
-                .onSuccess { debts ->
-                    val details = coroutineScope {
-                        debts.map { debt ->
-                            async {
-                                debt.id to RecurringDebtDetails(
-                                    shares = recurringDebtRepository
-                                        .getRecurringDebtShares(debt.id)
-                                        .getOrDefault(emptyList()),
-                                    instances = recurringDebtRepository
-                                        .listInstances(debt.id)
-                                        .getOrDefault(emptyList()),
-                                    memberIds = recurringDebtRepository
-                                        .getRecurringDebtMembers(debt.id)
-                                        .getOrDefault(emptyList()),
-                                )
-                            }
-                        }.awaitAll().toMap()
-                    }
-                    _uiState.update {
-                        it.copy(
-                            debts = debts,
-                            shares = details.mapValues { entry -> entry.value.shares },
-                            instances = details.mapValues { entry -> entry.value.instances },
-                            memberIds = details.mapValues { entry -> entry.value.memberIds },
-                            isLoading = false,
-                        )
-                    }
+            combine(
+                recurringDebtRepository.observeDebts(groupId),
+                recurringDebtRepository.observeShares(groupId),
+                recurringDebtRepository.observeMemberIds(groupId),
+                recurringDebtRepository.observeInstances(groupId),
+            ) { debts, shares, memberIds, instances ->
+                RecurringDebtSnapshotView(
+                    debts = debts,
+                    shares = shares,
+                    instances = instances,
+                    memberIds = memberIds,
+                )
+            }.collect { snapshot ->
+                _uiState.update { state ->
+                    state.copy(
+                        debts = snapshot.debts,
+                        shares = snapshot.shares,
+                        instances = snapshot.instances,
+                        memberIds = snapshot.memberIds,
+                        isLoading = false,
+                        error = null,
+                    )
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update { it.copy(isLoading = false, error = error.userMessage()) }
-                }
+            }
         }
+    }
+
+    /** Asks the sync engine for a fresh snapshot; cached data stays visible meanwhile. */
+    fun refresh() {
+        _uiState.update { it.copy(error = null) }
+        recurringDebtRepository.refresh()
     }
 
     fun dismissInfo() {
         _uiState.update { it.copy(infoMessage = null) }
+    }
+
+    fun dismissError() {
+        _uiState.update { it.copy(error = null) }
     }
 
     fun toggleExpanded(debtId: Long) {
@@ -221,7 +216,7 @@ class RecurringDebtsViewModel(
             parsedStart == null -> "Enter a valid start date (YYYY-MM-DD)."
             trimmedEnd.isNotEmpty() && parsedEnd == null ->
                 "Enter a valid end date (YYYY-MM-DD)."
-            parsedEnd != null && parsedStart != null && !parsedEnd.isAfter(parsedStart) ->
+            parsedEnd != null && !parsedEnd.isAfter(parsedStart) ->
                 "End date must be after the start date."
             memberIds.isEmpty() -> "Select at least one member."
             else -> null
@@ -231,13 +226,14 @@ class RecurringDebtsViewModel(
             return
         }
         if (_uiState.value.isSaving) return
-        _uiState.update { it.copy(isSaving = true, formError = null) }
+        _uiState.update { it.copy(isSaving = true, formError = null, error = null) }
 
         viewModelScope.launch {
             val editingId = _uiState.value.editingDebtId
             val end = trimmedEnd.takeIf { it.isNotEmpty() }
             val result: Result<Unit> = if (editingId != null) {
                 recurringDebtRepository.updateRecurringDebt(
+                    groupId = groupId,
                     recurringDebtId = editingId,
                     request = UpdateRecurringDebtRequest(
                         name = trimmedName,
@@ -271,10 +267,8 @@ class RecurringDebtsViewModel(
                             formError = null,
                         )
                     }
-                    load()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
                         it.copy(isSaving = false, formError = error.userMessage())
                     }
@@ -284,18 +278,34 @@ class RecurringDebtsViewModel(
 
     fun toggleActive(debt: RecurringDebtDto) {
         if (debt.id in _uiState.value.togglingIds) return
-        _uiState.update { it.copy(togglingIds = it.togglingIds + debt.id) }
+        val desired = !debt.isActive
+        // Flip locally right away; the repository persists the same state into the outbox.
+        _uiState.update { state ->
+            state.copy(
+                debts = state.debts.map { existing ->
+                    if (existing.id != debt.id) {
+                        existing
+                    } else {
+                        existing.copy(
+                            isActive = desired,
+                            status = statusFor(desired, existing.endDate),
+                        )
+                    }
+                },
+                togglingIds = state.togglingIds + debt.id,
+                error = null,
+            )
+        }
         viewModelScope.launch {
-            recurringDebtRepository.toggleRecurringDebt(debt.id)
+            recurringDebtRepository.toggleRecurringDebt(groupId, debt.id)
                 .onSuccess {
                     _uiState.update { it.copy(togglingIds = it.togglingIds - debt.id) }
-                    load()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            togglingIds = it.togglingIds - debt.id,
+                    _uiState.update { state ->
+                        state.copy(
+                            togglingIds = state.togglingIds - debt.id,
+                            debts = state.debts.map { if (it.id == debt.id) debt else it },
                             error = error.userMessage(),
                         )
                     }
@@ -305,20 +315,18 @@ class RecurringDebtsViewModel(
 
     fun generateNow(debt: RecurringDebtDto) {
         if (debt.id in _uiState.value.generatingIds) return
-        _uiState.update { it.copy(generatingIds = it.generatingIds + debt.id) }
+        _uiState.update { it.copy(generatingIds = it.generatingIds + debt.id, error = null) }
         viewModelScope.launch {
-            recurringDebtRepository.generateRecurringDebt(debt.id)
-                .onSuccess { sharedDebtId ->
+            recurringDebtRepository.generateRecurringDebt(groupId, debt.id)
+                .onSuccess {
                     _uiState.update {
                         it.copy(
                             generatingIds = it.generatingIds - debt.id,
-                            infoMessage = "Generated shared debt #$sharedDebtId.",
+                            infoMessage = "Generation queued. It will appear after the next sync.",
                         )
                     }
-                    load()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
                         it.copy(
                             generatingIds = it.generatingIds - debt.id,
@@ -334,36 +342,18 @@ class RecurringDebtsViewModel(
     }
 
     fun dismissDelete() {
-        if (_uiState.value.isDeleting) return
         _uiState.update { it.copy(deleteTarget = null) }
     }
 
     fun confirmDelete() {
         val target = _uiState.value.deleteTarget ?: return
-        if (_uiState.value.isDeleting) return
-        _uiState.update { it.copy(isDeleting = true) }
+        // Close the dialog before the (local, near-instant) mutation lands.
+        _uiState.update { it.copy(deleteTarget = null, error = null) }
         viewModelScope.launch {
-            recurringDebtRepository.deleteRecurringDebt(target.id)
-                .onSuccess {
-                    _uiState.update { it.copy(isDeleting = false, deleteTarget = null) }
-                    load()
-                }
+            recurringDebtRepository.deleteRecurringDebt(groupId, target.id)
                 .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            isDeleting = false,
-                            deleteTarget = null,
-                            error = error.userMessage(),
-                        )
-                    }
+                    _uiState.update { it.copy(error = error.userMessage()) }
                 }
-        }
-    }
-
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
         }
     }
 
@@ -376,14 +366,24 @@ class RecurringDebtsViewModel(
         }
     }
 
+    /** Mirrors the repository's derived status so the optimistic toggle looks right instantly. */
+    private fun statusFor(isActive: Boolean, endDate: String?): String {
+        if (!isActive) return "Paused"
+        val parsedEnd = endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        return if (parsedEnd != null && LocalDate.now(ZoneOffset.UTC).isAfter(parsedEnd)) {
+            "Expired"
+        } else {
+            "Active"
+        }
+    }
+
     companion object {
         fun factory(
             groupId: Long,
             recurringDebtRepository: RecurringDebtRepository,
-            authRepository: AuthRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                RecurringDebtsViewModel(groupId, recurringDebtRepository, authRepository)
+                RecurringDebtsViewModel(groupId, recurringDebtRepository)
             }
         }
     }
@@ -394,19 +394,15 @@ fun RecurringDebtsTab(
     groupId: Long,
     members: List<GroupMemberDto>,
     recurringDebtRepository: RecurringDebtRepository,
-    authRepository: AuthRepository,
 ) {
     val viewModel: RecurringDebtsViewModel = viewModel(
         key = "recurring-debts-$groupId",
         factory = RecurringDebtsViewModel.factory(
             groupId = groupId,
             recurringDebtRepository = recurringDebtRepository,
-            authRepository = authRepository,
         ),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { viewModel.load() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -415,7 +411,7 @@ fun RecurringDebtsTab(
 
             state.error != null && state.debts.isEmpty() -> TabError(
                 message = state.error.orEmpty(),
-                onRetry = { viewModel.load() },
+                onRetry = { viewModel.refresh() },
             )
 
             state.debts.isEmpty() -> EmptyRecurringDebts(onCreate = { viewModel.openCreate() })
@@ -431,7 +427,8 @@ fun RecurringDebtsTab(
                 state.error?.let { message ->
                     ErrorBanner(
                         message = message,
-                        onRetry = { viewModel.load() },
+                        onRetry = { viewModel.refresh() },
+                        onDismiss = { viewModel.dismissError() },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
@@ -450,6 +447,7 @@ fun RecurringDebtsTab(
                             debt = debt,
                             shares = state.shares[debt.id].orEmpty(),
                             instances = state.instances[debt.id].orEmpty(),
+                            memberIds = state.memberIds[debt.id].orEmpty(),
                             expanded = debt.id in state.expandedIds,
                             isToggling = debt.id in state.togglingIds,
                             isGenerating = debt.id in state.generatingIds,
@@ -518,22 +516,12 @@ fun RecurringDebtsTab(
             title = { Text("Delete recurring debt") },
             text = { Text("Delete \"${debt.name}\"? This cannot be undone.") },
             confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmDelete() },
-                    enabled = !state.isDeleting,
-                ) {
-                    if (state.isDeleting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
+                TextButton(onClick = { viewModel.confirmDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissDelete() }, enabled = !state.isDeleting) {
+                TextButton(onClick = { viewModel.dismissDelete() }) {
                     Text("Cancel")
                 }
             },
@@ -546,6 +534,7 @@ private fun RecurringDebtCard(
     debt: RecurringDebtDto,
     shares: List<RecurringDebtMemberDto>,
     instances: List<GeneratedInstanceDto>,
+    memberIds: List<Long>,
     expanded: Boolean,
     isToggling: Boolean,
     isGenerating: Boolean,
@@ -649,7 +638,11 @@ private fun RecurringDebtCard(
 
             if (expanded) {
                 Text(
-                    text = "Shares",
+                    text = if (memberIds.isEmpty()) {
+                        "Split between ${shares.size} members"
+                    } else {
+                        "Split between ${memberIds.size} members"
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

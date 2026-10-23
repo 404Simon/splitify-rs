@@ -121,11 +121,9 @@ pub async fn update_shopping_list(
     verify_list_access(pool, user_id, list_id).await?;
 
     let trimmed_name = name.trim();
-    let now = time::OffsetDateTime::now_utc();
     sqlx::query!(
-        "UPDATE shopping_lists SET name = ?, updated_at = ? WHERE id = ?",
+        "UPDATE shopping_lists SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         trimmed_name,
-        now,
         list_id
     )
     .execute(pool)
@@ -281,6 +279,10 @@ pub async fn add_item(
 }
 
 /// Toggle an item's completion state and notify subscribers.
+///
+/// When `desired` is provided the call becomes idempotent: the requested state
+/// is applied without flipping, and an already-matching state is a no-op that
+/// performs no update, broadcast or activity log.
 #[cfg(feature = "ssr")]
 pub async fn toggle_item(
     pool: &SqlitePool,
@@ -288,6 +290,7 @@ pub async fn toggle_item(
     broadcaster: &EventBroadcaster,
     list_id: i64,
     item_id: i64,
+    desired: Option<bool>,
 ) -> Result<bool, ServerFnError> {
     verify_list_access(pool, user_id, list_id).await?;
 
@@ -301,7 +304,13 @@ pub async fn toggle_item(
     .map_err(|e| ServerFnError::new(e.to_string()))?
     .ok_or_else(|| ServerFnError::new("Item not found"))?;
 
-    let new_completed = item.is_completed == 0;
+    let current_completed = item.is_completed != 0;
+    let new_completed = desired.unwrap_or(!current_completed);
+
+    if new_completed == current_completed {
+        return Ok(current_completed);
+    }
+
     let now = time::OffsetDateTime::now_utc();
     let completed_by_value = if new_completed { Some(user_id) } else { None };
     let completed_at_value = if new_completed { Some(now) } else { None };
@@ -312,13 +321,12 @@ pub async fn toggle_item(
         SET is_completed = ?, 
             completed_by = ?, 
             completed_at = ?,
-            updated_at = ?
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         "#,
         new_completed,
         completed_by_value,
         completed_at_value,
-        now,
         item_id
     )
     .execute(pool)
@@ -367,17 +375,15 @@ pub async fn update_item(
     verify_list_access(pool, user_id, list_id).await?;
 
     let trimmed_name = name.trim();
-    let now = time::OffsetDateTime::now_utc();
     let result = sqlx::query!(
         r#"
         UPDATE shopping_list_items 
-        SET name = ?, quantity = ?, category = ?, updated_at = ?
+        SET name = ?, quantity = ?, category = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND shopping_list_id = ?
         "#,
         trimmed_name,
         quantity,
         category,
-        now,
         item_id,
         list_id
     )

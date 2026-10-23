@@ -1,5 +1,7 @@
 package com.splitify.app.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -36,6 +38,12 @@ fun AppNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination,
+        // The stock NavHost transition (including its scale-down on back) feels
+        // out of place here. Every destination change is instantaneous.
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None },
     ) {
         composable(Routes.LOGIN) {
             LoginScreen(
@@ -80,7 +88,7 @@ fun AppNavHost(
                 factory = GroupDetailViewModel.factory(
                     groupId = groupId,
                     groupRepository = container.groupRepository,
-                    authRepository = container.authRepository,
+                    session = container.session,
                 ),
             )
             GroupDetailScreen(

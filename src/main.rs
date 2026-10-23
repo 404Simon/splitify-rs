@@ -58,6 +58,10 @@ async fn main() {
 
     tracing::info!("Database initialized successfully");
 
+    if let Err(error) = api::purge_expired_idempotency_keys(&pool).await {
+        tracing::warn!(%error, "Failed to purge expired idempotency keys");
+    }
+
     // Setup session store
     let session_store = SqliteStore::new(pool.clone());
     session_store
@@ -229,7 +233,7 @@ async fn main() {
             },
         )
         .merge(sse_router)
-        .merge(api::router())
+        .merge(api::router(pool.clone()))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         .layer(ServiceBuilder::new().layer(session_layer))
         .with_state(app_state);

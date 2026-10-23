@@ -34,6 +34,7 @@ pub fn router() -> Router<crate::state::AppState> {
             get(get_group).patch(update_group).delete(delete_group),
         )
         .route("/{group_id}/members", get(list_members))
+        .route("/{group_id}/snapshot", get(super::sync::group_snapshot))
 }
 
 async fn list_groups(

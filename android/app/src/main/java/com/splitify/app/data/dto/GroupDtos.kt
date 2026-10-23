@@ -39,3 +39,9 @@ data class CreateGroupRequest(
 data class CreateGroupResponse(
     val id: Long,
 )
+
+@Serializable
+data class UpdateGroupRequest(
+    val name: String,
+    @SerialName("member_ids") val memberIds: List<Long>,
+)

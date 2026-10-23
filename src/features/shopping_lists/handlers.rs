@@ -161,6 +161,7 @@ pub async fn toggle_shopping_list_item(item_id: i64) -> Result<bool, ServerFnErr
         &broadcaster,
         list_id,
         item_id,
+        None,
     )
     .await
 }

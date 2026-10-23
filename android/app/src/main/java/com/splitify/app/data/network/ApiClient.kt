@@ -24,11 +24,11 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.json.Json
 
 class ApiClient(
     baseUrl: String,
     private val tokenProvider: suspend () -> String?,
+    private val onUnauthorized: suspend () -> Unit = {},
 ) {
 
     private val baseUrl: String = baseUrl.trimEnd('/') + "/"
@@ -44,11 +44,7 @@ class ApiClient(
         }
     }
 
-    private val json: Json = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-        encodeDefaults = true
-    }
+    private val json = AppJson
 
     private val client: HttpClient = HttpClient(OkHttp) {
         expectSuccess = false
@@ -91,14 +87,34 @@ class ApiClient(
         bodySerializer: KSerializer<B>,
         serializer: KSerializer<T>,
         authenticated: Boolean = true,
+        idempotencyKey: String? = null,
     ): T {
         val payload = json.encodeToString(bodySerializer, body)
-        return execute(method = HttpMethod.Post, path = path, payload = payload, authenticated = authenticated)
-            .decode(serializer)
+        return execute(
+            method = HttpMethod.Post,
+            path = path,
+            payload = payload,
+            authenticated = authenticated,
+            idempotencyKey = idempotencyKey,
+        ).decode(serializer)
     }
 
-    suspend fun postNoContent(path: String, authenticated: Boolean = true) {
-        execute(method = HttpMethod.Post, path = path, authenticated = authenticated)
+    suspend fun postNoContent(
+        path: String,
+        authenticated: Boolean = true,
+        idempotencyKey: String? = null,
+    ) {
+        execute(
+            method = HttpMethod.Post,
+            path = path,
+            authenticated = authenticated,
+            idempotencyKey = idempotencyKey,
+        )
+    }
+
+    /** Best-effort revocation after the local session was already cleared. */
+    suspend fun postNoContentWithToken(path: String, token: String) {
+        execute(method = HttpMethod.Post, path = path, explicitToken = token)
     }
 
     suspend fun <B> patch(
@@ -106,13 +122,29 @@ class ApiClient(
         body: B,
         bodySerializer: KSerializer<B>,
         authenticated: Boolean = true,
+        idempotencyKey: String? = null,
     ) {
         val payload = json.encodeToString(bodySerializer, body)
-        execute(method = HttpMethod.Patch, path = path, payload = payload, authenticated = authenticated)
+        execute(
+            method = HttpMethod.Patch,
+            path = path,
+            payload = payload,
+            authenticated = authenticated,
+            idempotencyKey = idempotencyKey,
+        )
     }
 
-    suspend fun delete(path: String, authenticated: Boolean = true) {
-        execute(method = HttpMethod.Delete, path = path, authenticated = authenticated)
+    suspend fun delete(
+        path: String,
+        authenticated: Boolean = true,
+        idempotencyKey: String? = null,
+    ) {
+        execute(
+            method = HttpMethod.Delete,
+            path = path,
+            authenticated = authenticated,
+            idempotencyKey = idempotencyKey,
+        )
     }
 
     private suspend fun execute(
@@ -120,8 +152,11 @@ class ApiClient(
         path: String,
         payload: String? = null,
         authenticated: Boolean = true,
+        idempotencyKey: String? = null,
+        explicitToken: String? = null,
     ): HttpResponse {
-        val token = if (authenticated) tokenProvider() ?: throw ApiException.Unauthorized() else null
+        val token = explicitToken
+            ?: if (authenticated) tokenProvider() ?: throw ApiException.Unauthorized() else null
 
         val response = try {
             client.request(path) {
@@ -133,6 +168,9 @@ class ApiClient(
                 if (token != null) {
                     header(HttpHeaders.Authorization, "Bearer $token")
                 }
+                if (idempotencyKey != null) {
+                    header(IDEMPOTENCY_HEADER, idempotencyKey)
+                }
             }
         } catch (error: CancellationException) {
             throw error
@@ -141,7 +179,11 @@ class ApiClient(
         }
 
         if (!response.status.isSuccess()) {
-            throw response.toApiException()
+            val exception = response.toApiException()
+            if (authenticated && exception.isUnauthorized) {
+                onUnauthorized()
+            }
+            throw exception
         }
         return response
     }
@@ -182,6 +224,10 @@ class ApiClient(
             }
 
         return ApiException.Http(statusCode = status.value, serverMessage = serverMessage)
+    }
+
+    private companion object {
+        const val IDEMPOTENCY_HEADER = "Idempotency-Key"
     }
 }
 

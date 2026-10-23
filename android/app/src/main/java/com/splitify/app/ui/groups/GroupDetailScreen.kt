@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,7 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -104,6 +105,11 @@ fun GroupDetailScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = viewModel::load) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh group")
+                    }
+                },
             )
         },
     ) { padding ->
@@ -123,7 +129,7 @@ fun GroupDetailScreen(
                 else -> state.group?.let { group ->
                     Column(modifier = Modifier.fillMaxSize()) {
                         GroupHeader(group = group, memberCount = state.members.size)
-                        ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
+                        PrimaryScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
                             GroupTabs.forEachIndexed { index, title ->
                                 Tab(
                                     selected = selectedTab == index,
@@ -138,31 +144,26 @@ fun GroupDetailScreen(
                                 groupId = group.id,
                                 members = state.members,
                                 debtRepository = debtRepository,
-                                authRepository = authRepository,
                             )
                             2 -> TransactionsTab(
                                 groupId = group.id,
                                 members = state.members,
                                 currentUserId = state.currentUserId,
                                 transactionRepository = transactionRepository,
-                                authRepository = authRepository,
                             )
                             3 -> BalancesTab(
                                 groupId = group.id,
                                 transactionRepository = transactionRepository,
-                                authRepository = authRepository,
                             )
                             4 -> ShoppingListsTab(
                                 groupId = group.id,
                                 currentUserId = state.currentUserId,
                                 shoppingListRepository = shoppingListRepository,
-                                authRepository = authRepository,
                             )
                             5 -> RecurringDebtsTab(
                                 groupId = group.id,
                                 members = state.members,
                                 recurringDebtRepository = recurringDebtRepository,
-                                authRepository = authRepository,
                             )
                             6 -> InvitesTab(
                                 groupId = group.id,
@@ -174,7 +175,6 @@ fun GroupDetailScreen(
                                 currentUserId = state.currentUserId,
                                 groupCreatedBy = group.createdBy,
                                 mapMarkerRepository = mapMarkerRepository,
-                                authRepository = authRepository,
                             )
                         }
                     }

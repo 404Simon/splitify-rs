@@ -21,7 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -30,7 +30,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -51,7 +50,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.splitify.app.data.dto.GroupSummaryDto
-import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +84,12 @@ fun GroupsScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = viewModel::load,
+                        enabled = !state.isLoggingOut,
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh groups")
+                    }
                     IconButton(
                         onClick = { viewModel.setAcceptDialogVisible(true) },
                         enabled = !state.isLoggingOut,
@@ -127,31 +131,14 @@ fun GroupsScreen(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            if (state.isLoading && state.groups.isNotEmpty()) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
-
             when {
                 state.isLoading && state.groups.isEmpty() -> LoadingScreen(message = "Loading groups…")
-
-                state.error != null && state.groups.isEmpty() -> CenteredMessage(
-                    message = state.error.orEmpty(),
-                    onRetry = { viewModel.load() },
-                )
 
                 state.groups.isEmpty() -> EmptyGroups(
                     onCreate = { viewModel.setCreateDialogVisible(true) },
                 )
 
                 else -> {
-                    state.error?.let { message ->
-                        ErrorBanner(
-                            message = message,
-                            onRetry = { viewModel.load() },
-                            onDismiss = { viewModel.dismissError() },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
@@ -348,37 +335,6 @@ private fun EmptyGroups(onCreate: () -> Unit) {
         Spacer(Modifier.height(20.dp))
         Button(onClick = onCreate) {
             Text("Create group")
-        }
-    }
-}
-
-@Composable
-private fun CenteredMessage(
-    message: String,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = onRetry) {
-            Text("Retry")
         }
     }
 }

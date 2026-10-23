@@ -9,7 +9,6 @@ import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.dto.GroupSummaryDto
 import com.splitify.app.data.groups.GroupRepository
 import com.splitify.app.data.invites.InviteRepository
-import com.splitify.app.data.network.ApiException
 import com.splitify.app.data.network.userMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +19,6 @@ import kotlinx.coroutines.launch
 data class GroupsUiState(
     val groups: List<GroupSummaryDto> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null,
     val isCreating: Boolean = false,
     val createError: String? = null,
     val showCreateDialog: Boolean = false,
@@ -31,6 +29,11 @@ data class GroupsUiState(
     val acceptedGroupId: Long? = null,
 )
 
+/**
+ * Reads the cached group list from [GroupRepository] and never blocks on the
+ * network. Sync state is surfaced globally by the SyncBanner, so this screen
+ * only owns local validation errors and dialog state.
+ */
 class GroupsViewModel(
     private val groupRepository: GroupRepository,
     private val authRepository: AuthRepository,
@@ -41,25 +44,24 @@ class GroupsViewModel(
     val uiState: StateFlow<GroupsUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                groupRepository.observeGroups(),
+                groupRepository.isLoaded,
+            ) { groups, loaded ->
+                groups to loaded
+            }.collect { (groups, loaded) ->
+                _uiState.update {
+                    it.copy(groups = groups, isLoading = !loaded)
+                }
+            }
+        }
         load()
     }
 
+    /** Requests a background refresh; cached data stays visible throughout. */
     fun load() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            groupRepository.listGroups()
-                .onSuccess { groups ->
-                    _uiState.update { it.copy(groups = groups, isLoading = false) }
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update { it.copy(isLoading = false, error = error.userMessage()) }
-                }
-        }
-    }
-
-    fun dismissError() {
-        _uiState.update { it.copy(error = null) }
+        groupRepository.refresh()
     }
 
     fun setCreateDialogVisible(visible: Boolean) {
@@ -77,15 +79,14 @@ class GroupsViewModel(
         viewModelScope.launch {
             groupRepository.createGroup(trimmed)
                 .onSuccess {
+                    // The observed flow adds the new group; no reload needed.
                     _uiState.update {
                         it.copy(isCreating = false, showCreateDialog = false, createError = null)
                     }
-                    load()
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
+                .onFailure {
                     _uiState.update {
-                        it.copy(isCreating = false, createError = error.userMessage())
+                        it.copy(isCreating = false, createError = "Could not create the group.")
                     }
                 }
         }
@@ -115,10 +116,9 @@ class GroupsViewModel(
                             acceptedGroupId = groupId,
                         )
                     }
-                    load()
+                    groupRepository.refresh()
                 }
                 .onFailure { error ->
-                    handleUnauthorized(error)
                     _uiState.update {
                         it.copy(isAccepting = false, acceptError = error.userMessage())
                     }
@@ -136,12 +136,6 @@ class GroupsViewModel(
         viewModelScope.launch {
             authRepository.logout()
             _uiState.update { it.copy(isLoggingOut = false) }
-        }
-    }
-
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
         }
     }
 

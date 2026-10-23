@@ -1,34 +1,42 @@
 package com.splitify.app.data.groups
 
-import com.splitify.app.data.dto.CreateGroupRequest
-import com.splitify.app.data.dto.CreateGroupResponse
+import com.splitify.app.data.auth.SessionManager
+import com.splitify.app.data.cache.LocalStore
 import com.splitify.app.data.dto.GroupDto
 import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.dto.GroupSummaryDto
-import com.splitify.app.data.network.ApiClient
-import com.splitify.app.data.network.apiResult
-import kotlinx.serialization.builtins.ListSerializer
+import com.splitify.app.data.sync.SyncManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
-class GroupRepository(private val api: ApiClient) {
+class GroupRepository(
+    private val localStore: LocalStore,
+    private val syncManager: SyncManager,
+    private val session: SessionManager,
+) {
 
-    suspend fun listGroups(): Result<List<GroupSummaryDto>> = apiResult {
-        api.get("groups", ListSerializer(GroupSummaryDto.serializer()))
+    val isLoaded: kotlinx.coroutines.flow.StateFlow<Boolean> = localStore.isLoaded
+
+    fun observeGroups(): Flow<List<GroupSummaryDto>> = localStore.groups
+
+    fun observeGroup(groupId: Long): Flow<GroupDto?> =
+        localStore.observeGroup(groupId).map { it?.group }
+
+    fun observeMembers(groupId: Long): Flow<List<GroupMemberDto>> =
+        localStore.observeGroup(groupId).map { snapshot ->
+            snapshot?.members.orEmpty().sortedWith(
+                compareByDescending<GroupMemberDto> { it.isCreator }.thenBy { it.username.lowercase() },
+            )
+        }
+
+    suspend fun createGroup(name: String): Result<Long> = runCatching {
+        val user = session.requireUser()
+        val group = localStore.createGroup(name.trim(), user)
+        syncManager.requestSync()
+        group.id
     }
 
-    suspend fun createGroup(name: String): Result<Long> = apiResult {
-        api.post(
-            path = "groups",
-            body = CreateGroupRequest(name = name),
-            bodySerializer = CreateGroupRequest.serializer(),
-            serializer = CreateGroupResponse.serializer(),
-        ).id
-    }
-
-    suspend fun getGroup(groupId: Long): Result<GroupDto> = apiResult {
-        api.get("groups/$groupId", GroupDto.serializer())
-    }
-
-    suspend fun getMembers(groupId: Long): Result<List<GroupMemberDto>> = apiResult {
-        api.get("groups/$groupId/members", ListSerializer(GroupMemberDto.serializer()))
+    fun refresh() {
+        syncManager.requestSync()
     }
 }

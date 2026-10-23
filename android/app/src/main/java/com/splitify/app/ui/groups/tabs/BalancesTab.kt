@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,13 +35,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.dto.DebtRelationshipDto
 import com.splitify.app.data.dto.UserBalanceDto
-import com.splitify.app.data.network.ApiException
-import com.splitify.app.data.network.userMessage
 import com.splitify.app.data.transactions.TransactionRepository
-import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,35 +48,23 @@ import kotlinx.coroutines.launch
 data class BalancesUiState(
     val balances: List<UserBalanceDto> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null,
 )
 
 class BalancesViewModel(
-    private val groupId: Long,
-    private val transactionRepository: TransactionRepository,
-    private val authRepository: AuthRepository,
+    groupId: Long,
+    transactionRepository: TransactionRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BalancesUiState())
     val uiState: StateFlow<BalancesUiState> = _uiState.asStateFlow()
 
-    fun load() {
+    init {
+        // Balances are derived locally from the cached snapshot, so this needs no
+        // network call and picks up optimistic debts/transactions immediately.
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            transactionRepository.getBalances(groupId)
-                .onSuccess { balances ->
-                    _uiState.update { it.copy(balances = balances, isLoading = false) }
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update { it.copy(isLoading = false, error = error.userMessage()) }
-                }
-        }
-    }
-
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
+            transactionRepository.observeBalances(groupId).collect { balances ->
+                _uiState.update { it.copy(balances = balances, isLoading = false) }
+            }
         }
     }
 
@@ -89,9 +72,8 @@ class BalancesViewModel(
         fun factory(
             groupId: Long,
             transactionRepository: TransactionRepository,
-            authRepository: AuthRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { BalancesViewModel(groupId, transactionRepository, authRepository) }
+            initializer { BalancesViewModel(groupId, transactionRepository) }
         }
     }
 }
@@ -100,47 +82,26 @@ class BalancesViewModel(
 fun BalancesTab(
     groupId: Long,
     transactionRepository: TransactionRepository,
-    authRepository: AuthRepository,
 ) {
     val viewModel: BalancesViewModel = viewModel(
         key = "balances-$groupId",
-        factory = BalancesViewModel.factory(groupId, transactionRepository, authRepository),
+        factory = BalancesViewModel.factory(groupId, transactionRepository),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { viewModel.load() }
 
     when {
         state.isLoading && state.balances.isEmpty() ->
             LoadingScreen(message = "Calculating balances…")
 
-        state.error != null && state.balances.isEmpty() -> Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            ErrorBanner(message = state.error.orEmpty(), onRetry = { viewModel.load() })
-        }
-
         state.balances.isEmpty() -> EmptyBalances()
 
-        else -> Column(modifier = Modifier.fillMaxSize()) {
-            state.error?.let { message ->
-                ErrorBanner(
-                    message = message,
-                    onRetry = { viewModel.load() },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.balances, key = { it.userId }) { balance ->
-                    BalanceCard(balance = balance)
-                }
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(state.balances, key = { it.userId }) { balance ->
+                BalanceCard(balance = balance)
             }
         }
     }

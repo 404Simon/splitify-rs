@@ -3,10 +3,12 @@ mod debts;
 mod error;
 mod extractors;
 mod groups;
+mod idempotency;
 mod invites;
 mod maps;
 mod recurring_debts;
 mod shopping_lists;
+mod sync;
 mod tokens;
 mod transactions;
 
@@ -37,7 +39,7 @@ struct HealthResponse {
     version: &'static str,
 }
 
-pub fn router() -> Router<AppState> {
+pub fn router(pool: SqlitePool) -> Router<AppState> {
     // Throttle credential endpoints per client IP to slow down brute-force and
     // credential-stuffing attempts. Applied only to the public auth routes so
     // that authenticated polling (e.g. `/auth/me`) is never throttled.
@@ -84,7 +86,21 @@ pub fn router() -> Router<AppState> {
         .nest("/api/v1/markers", maps::marker_router())
         .nest("/api/v1/map", maps::public_router())
         .route("/api/v1/users", get(list_users))
+        // Idempotency wraps the routes but stays inside the security-header
+        // layer so replayed responses also carry the standard headers.
+        .layer(middleware::from_fn_with_state(
+            pool,
+            idempotency::middleware,
+        ))
         .layer(middleware::from_fn(api_security_headers))
+}
+
+/// Delete idempotency keys that fell out of the seven-day retention window.
+///
+/// Called once on startup; the middleware also purges opportunistically after
+/// storing a response.
+pub async fn purge_expired_idempotency_keys(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    idempotency::purge_expired(pool).await
 }
 
 /// Default security headers for every JSON API response.

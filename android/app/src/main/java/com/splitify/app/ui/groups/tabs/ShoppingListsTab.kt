@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,13 +23,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,7 +38,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,17 +56,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.dto.ShoppingListActivityDto
 import com.splitify.app.data.dto.ShoppingListDto
 import com.splitify.app.data.dto.ShoppingListItemDto
 import com.splitify.app.data.dto.ShoppingListSummaryDto
-import com.splitify.app.data.network.ApiException
-import com.splitify.app.data.network.userMessage
 import com.splitify.app.data.shoppinglists.ShoppingListRepository
 import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
-import kotlinx.coroutines.async
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -78,6 +71,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * Snapshot of the tab. Everything rendered here comes from [ShoppingListRepository]
+ * flows (the local cache), so the UI never waits for the network.
+ */
 data class ShoppingListsUiState(
     val lists: List<ShoppingListSummaryDto> = emptyList(),
     val selectedListId: Long? = null,
@@ -89,68 +86,80 @@ data class ShoppingListsUiState(
     val isLoadingDetail: Boolean = false,
     val detailError: String? = null,
     val showCreateDialog: Boolean = false,
-    val isCreating: Boolean = false,
     val createError: String? = null,
     val renameTarget: ShoppingListSummaryDto? = null,
-    val isRenaming: Boolean = false,
     val renameError: String? = null,
     val deleteTarget: ShoppingListSummaryDto? = null,
-    val isDeleting: Boolean = false,
     val showItemDialog: Boolean = false,
     val editingItem: ShoppingListItemDto? = null,
-    val isSavingItem: Boolean = false,
     val itemError: String? = null,
     val deleteItemTarget: ShoppingListItemDto? = null,
-    val isDeletingItem: Boolean = false,
-    val togglingItemIds: Set<Long> = emptySet(),
 )
 
 class ShoppingListsViewModel(
     private val groupId: Long,
     private val shoppingListRepository: ShoppingListRepository,
-    private val authRepository: AuthRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ShoppingListsUiState())
     val uiState: StateFlow<ShoppingListsUiState> = _uiState.asStateFlow()
 
-    fun loadLists() {
+    private var detailJob: Job? = null
+
+    /**
+     * Taps waiting for the local snapshot write to land. Guards against a fast
+     * double tap reading the same pre-toggle state twice.
+     */
+    private val inFlightToggles = mutableSetOf<Long>()
+
+    init {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            shoppingListRepository.listLists(groupId)
-                .onSuccess { lists ->
-                    _uiState.update { it.copy(lists = lists, isLoading = false) }
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update { it.copy(isLoading = false, error = error.userMessage()) }
-                }
+            shoppingListRepository.observeLists(groupId).collect { lists ->
+                _uiState.update { it.copy(lists = lists, isLoading = false) }
+            }
         }
     }
 
     fun selectList(listId: Long) {
+        if (_uiState.value.selectedListId == listId) return
         _uiState.update {
             it.copy(
                 selectedListId = listId,
                 selectedList = null,
                 items = emptyList(),
                 activity = emptyList(),
+                isLoadingDetail = true,
                 detailError = null,
             )
         }
-        loadDetail(listId)
+        observeDetail(listId)
     }
 
     fun closeDetail() {
+        detailJob?.cancel()
+        detailJob = null
         _uiState.update {
             it.copy(
                 selectedListId = null,
                 selectedList = null,
                 items = emptyList(),
                 activity = emptyList(),
+                isLoadingDetail = false,
                 detailError = null,
+                showItemDialog = false,
+                editingItem = null,
+                itemError = null,
+                deleteItemTarget = null,
             )
         }
+    }
+
+    fun dismissError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
+    fun dismissDetailError() {
+        _uiState.update { it.copy(detailError = null) }
     }
 
     fun openCreate() {
@@ -158,7 +167,6 @@ class ShoppingListsViewModel(
     }
 
     fun dismissCreate() {
-        if (_uiState.value.isCreating) return
         _uiState.update { it.copy(showCreateDialog = false, createError = null) }
     }
 
@@ -168,26 +176,14 @@ class ShoppingListsViewModel(
             _uiState.update { it.copy(createError = "Enter a list name.") }
             return
         }
-        if (_uiState.value.isCreating) return
-        _uiState.update { it.copy(isCreating = true, createError = null) }
         viewModelScope.launch {
             shoppingListRepository.createList(groupId, trimmed)
                 .onSuccess { listId ->
-                    _uiState.update {
-                        it.copy(
-                            isCreating = false,
-                            showCreateDialog = false,
-                            createError = null,
-                        )
-                    }
-                    loadLists()
+                    _uiState.update { it.copy(showCreateDialog = false, createError = null) }
                     selectList(listId)
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(isCreating = false, createError = error.userMessage())
-                    }
+                .onFailure {
+                    _uiState.update { it.copy(createError = "Couldn't create the list.") }
                 }
         }
     }
@@ -197,7 +193,6 @@ class ShoppingListsViewModel(
     }
 
     fun dismissRename() {
-        if (_uiState.value.isRenaming) return
         _uiState.update { it.copy(renameTarget = null, renameError = null) }
     }
 
@@ -208,25 +203,11 @@ class ShoppingListsViewModel(
             _uiState.update { it.copy(renameError = "Enter a list name.") }
             return
         }
-        if (_uiState.value.isRenaming) return
-        _uiState.update { it.copy(isRenaming = true, renameError = null) }
+        _uiState.update { it.copy(renameTarget = null, renameError = null) }
         viewModelScope.launch {
-            shoppingListRepository.updateList(target.id, trimmed)
-                .onSuccess {
-                    val selectedId = _uiState.value.selectedListId
-                    _uiState.update {
-                        it.copy(isRenaming = false, renameTarget = null, renameError = null)
-                    }
-                    loadLists()
-                    if (selectedId == target.id) {
-                        loadDetail(target.id)
-                    }
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(isRenaming = false, renameError = error.userMessage())
-                    }
+            shoppingListRepository.updateList(groupId, target.id, trimmed)
+                .onFailure {
+                    _uiState.update { it.copy(error = "Couldn't rename the list.") }
                 }
         }
     }
@@ -236,43 +217,22 @@ class ShoppingListsViewModel(
     }
 
     fun dismissDelete() {
-        if (_uiState.value.isDeleting) return
         _uiState.update { it.copy(deleteTarget = null) }
     }
 
     fun confirmDelete() {
         val target = _uiState.value.deleteTarget ?: return
-        if (_uiState.value.isDeleting) return
-        _uiState.update { it.copy(isDeleting = true) }
+        _uiState.update { it.copy(deleteTarget = null) }
         viewModelScope.launch {
-            shoppingListRepository.deleteList(target.id)
+            shoppingListRepository.deleteList(groupId, target.id)
                 .onSuccess {
-                    if (_uiState.value.selectedListId == target.id) {
-                        _uiState.update {
-                            it.copy(
-                                selectedListId = null,
-                                selectedList = null,
-                                items = emptyList(),
-                                activity = emptyList(),
-                                detailError = null,
-                                isDeleting = false,
-                                deleteTarget = null,
-                            )
-                        }
-                    } else {
-                        _uiState.update { it.copy(isDeleting = false, deleteTarget = null) }
+                    val state = _uiState.value
+                    if (state.selectedListId == target.id || state.selectedList?.id == target.id) {
+                        closeDetail()
                     }
-                    loadLists()
                 }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            isDeleting = false,
-                            deleteTarget = null,
-                            error = error.userMessage(),
-                        )
-                    }
+                .onFailure {
+                    _uiState.update { it.copy(error = "Couldn't delete the list.") }
                 }
         }
     }
@@ -286,7 +246,6 @@ class ShoppingListsViewModel(
     }
 
     fun dismissItemForm() {
-        if (_uiState.value.isSavingItem) return
         _uiState.update { it.copy(showItemDialog = false, editingItem = null, itemError = null) }
     }
 
@@ -297,45 +256,33 @@ class ShoppingListsViewModel(
             _uiState.update { it.copy(itemError = "Enter an item name.") }
             return
         }
-        if (_uiState.value.isSavingItem) return
         val editingItem = _uiState.value.editingItem
-        _uiState.update { it.copy(isSavingItem = true, itemError = null) }
+        val trimmedQuantity = quantity.trim().ifEmpty { null }
+        val trimmedCategory = category.trim().ifEmpty { null }
 
+        _uiState.update { it.copy(showItemDialog = false, editingItem = null, itemError = null) }
         viewModelScope.launch {
-            val result: Result<Unit> = if (editingItem != null) {
+            val result = if (editingItem != null) {
                 shoppingListRepository.updateItem(
+                    groupId = groupId,
                     listId = listId,
                     itemId = editingItem.id,
                     name = trimmedName,
-                    quantity = quantity.trim().ifEmpty { null },
-                    category = category.trim().ifEmpty { null },
+                    quantity = trimmedQuantity,
+                    category = trimmedCategory,
                 )
             } else {
                 shoppingListRepository.addItem(
+                    groupId = groupId,
                     listId = listId,
                     name = trimmedName,
-                    quantity = quantity.trim().ifEmpty { null },
-                    category = category.trim().ifEmpty { null },
+                    quantity = trimmedQuantity,
+                    category = trimmedCategory,
                 ).map { }
             }
-            result
-                .onSuccess {
-                    _uiState.update {
-                        it.copy(
-                            isSavingItem = false,
-                            showItemDialog = false,
-                            editingItem = null,
-                            itemError = null,
-                        )
-                    }
-                    refreshDetailAndLists(listId)
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(isSavingItem = false, itemError = error.userMessage())
-                    }
-                }
+            if (result.isFailure) {
+                updateDetail(listId) { it.copy(detailError = "Couldn't save the item.") }
+            }
         }
     }
 
@@ -344,115 +291,69 @@ class ShoppingListsViewModel(
     }
 
     fun dismissDeleteItem() {
-        if (_uiState.value.isDeletingItem) return
         _uiState.update { it.copy(deleteItemTarget = null) }
     }
 
     fun confirmDeleteItem() {
         val listId = _uiState.value.selectedListId ?: return
         val target = _uiState.value.deleteItemTarget ?: return
-        if (_uiState.value.isDeletingItem) return
-        _uiState.update { it.copy(isDeletingItem = true) }
+        _uiState.update { it.copy(deleteItemTarget = null) }
         viewModelScope.launch {
-            shoppingListRepository.deleteItem(listId, target.id)
-                .onSuccess {
-                    _uiState.update { it.copy(isDeletingItem = false, deleteItemTarget = null) }
-                    refreshDetailAndLists(listId)
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            isDeletingItem = false,
-                            deleteItemTarget = null,
-                            detailError = error.userMessage(),
-                        )
-                    }
+            shoppingListRepository.deleteItem(groupId, listId, target.id)
+                .onFailure {
+                    updateDetail(listId) { it.copy(detailError = "Couldn't delete the item.") }
                 }
         }
     }
 
     fun toggleItem(item: ShoppingListItemDto) {
         val listId = _uiState.value.selectedListId ?: return
-        if (item.id in _uiState.value.togglingItemIds) return
-        _uiState.update {
-            it.copy(togglingItemIds = it.togglingItemIds + item.id)
-        }
+        if (!inFlightToggles.add(item.id)) return
         viewModelScope.launch {
-            shoppingListRepository.toggleItem(listId, item.id)
-                .onSuccess { isCompleted ->
-                    _uiState.update { state ->
-                        state.copy(
-                            togglingItemIds = state.togglingItemIds - item.id,
-                            items = state.items.map { existing ->
-                                if (existing.id == item.id) {
-                                    existing.copy(isCompleted = isCompleted)
-                                } else {
-                                    existing
-                                }
-                            },
-                        )
+            try {
+                shoppingListRepository.toggleItem(groupId, listId, item.id)
+                    .onFailure {
+                        updateDetail(listId) { it.copy(detailError = "Couldn't update the item.") }
                     }
-                    refreshDetailAndLists(listId)
-                }
-                .onFailure { error ->
-                    handleUnauthorized(error)
-                    _uiState.update {
-                        it.copy(
-                            togglingItemIds = it.togglingItemIds - item.id,
-                            detailError = error.userMessage(),
-                        )
-                    }
-                }
-        }
-    }
-
-    private fun refreshDetailAndLists(listId: Long) {
-        loadDetail(listId)
-        loadLists()
-    }
-
-    private fun loadDetail(listId: Long) {
-        viewModelScope.launch {
-            if (_uiState.value.selectedListId != listId) return@launch
-            _uiState.update { it.copy(isLoadingDetail = true, detailError = null) }
-            val (listResult, itemsResult, activityResult) = coroutineScope {
-                val listDeferred = async { shoppingListRepository.getList(listId) }
-                val itemsDeferred = async { shoppingListRepository.listItems(listId) }
-                val activityDeferred = async { shoppingListRepository.listActivity(listId) }
-                Triple(
-                    listDeferred.await(),
-                    itemsDeferred.await(),
-                    activityDeferred.await(),
-                )
+            } finally {
+                inFlightToggles.remove(item.id)
             }
-            if (_uiState.value.selectedListId != listId) return@launch
+        }
+    }
 
-            val failure = listResult.exceptionOrNull()
-                ?: itemsResult.exceptionOrNull()
-                ?: activityResult.exceptionOrNull()
-            if (failure != null) {
-                handleUnauthorized(failure)
-                _uiState.update {
-                    it.copy(isLoadingDetail = false, detailError = failure.userMessage())
+    private fun observeDetail(listId: Long) {
+        detailJob?.cancel()
+        detailJob = viewModelScope.launch {
+            coroutineScope {
+                launch {
+                    shoppingListRepository.observeList(groupId, listId).collect { list ->
+                        updateDetail(listId) {
+                            it.copy(selectedList = list, isLoadingDetail = false)
+                        }
+                    }
                 }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        selectedList = listResult.getOrNull(),
-                        items = itemsResult.getOrDefault(emptyList()),
-                        activity = activityResult.getOrDefault(emptyList()),
-                        isLoadingDetail = false,
-                        detailError = null,
-                    )
+                launch {
+                    shoppingListRepository.observeItems(groupId, listId).collect { items ->
+                        updateDetail(listId) {
+                            it.copy(items = items, isLoadingDetail = false)
+                        }
+                    }
+                }
+                launch {
+                    shoppingListRepository.observeActivity(groupId, listId).collect { activity ->
+                        updateDetail(listId) { it.copy(activity = activity) }
+                    }
                 }
             }
         }
     }
 
-    private suspend fun handleUnauthorized(error: Throwable) {
-        if (error is ApiException.Http && error.isUnauthorized) {
-            authRepository.clearSession()
+    private fun updateDetail(
+        listId: Long,
+        transform: (ShoppingListsUiState) -> ShoppingListsUiState,
+    ) {
+        _uiState.update { state ->
+            if (state.selectedListId == listId) transform(state) else state
         }
     }
 
@@ -460,11 +361,8 @@ class ShoppingListsViewModel(
         fun factory(
             groupId: Long,
             shoppingListRepository: ShoppingListRepository,
-            authRepository: AuthRepository,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                ShoppingListsViewModel(groupId, shoppingListRepository, authRepository)
-            }
+            initializer { ShoppingListsViewModel(groupId, shoppingListRepository) }
         }
     }
 }
@@ -474,15 +372,12 @@ fun ShoppingListsTab(
     groupId: Long,
     currentUserId: Long?,
     shoppingListRepository: ShoppingListRepository,
-    authRepository: AuthRepository,
 ) {
     val viewModel: ShoppingListsViewModel = viewModel(
         key = "shopping-lists-$groupId",
-        factory = ShoppingListsViewModel.factory(groupId, shoppingListRepository, authRepository),
+        factory = ShoppingListsViewModel.factory(groupId, shoppingListRepository),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { viewModel.loadLists() }
 
     if (state.selectedListId != null) {
         ShoppingListDetail(
@@ -503,7 +398,6 @@ fun ShoppingListsTab(
             title = "New shopping list",
             label = "List name",
             initialName = "",
-            isSaving = state.isCreating,
             error = state.createError,
             confirmLabel = "Create",
             onDismiss = { viewModel.dismissCreate() },
@@ -516,7 +410,6 @@ fun ShoppingListsTab(
             title = "Rename list",
             label = "List name",
             initialName = target.name,
-            isSaving = state.isRenaming,
             error = state.renameError,
             confirmLabel = "Save",
             onDismiss = { viewModel.dismissRename() },
@@ -530,25 +423,12 @@ fun ShoppingListsTab(
             title = { Text("Delete shopping list") },
             text = { Text("Delete \"${target.name}\"? All of its items will be removed.") },
             confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmDelete() },
-                    enabled = !state.isDeleting,
-                ) {
-                    if (state.isDeleting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
+                TextButton(onClick = { viewModel.confirmDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { viewModel.dismissDelete() },
-                    enabled = !state.isDeleting,
-                ) {
+                TextButton(onClick = { viewModel.dismissDelete() }) {
                     Text("Cancel")
                 }
             },
@@ -558,7 +438,6 @@ fun ShoppingListsTab(
     if (state.showItemDialog) {
         ShoppingItemDialog(
             editingItem = state.editingItem,
-            isSaving = state.isSavingItem,
             error = state.itemError,
             onDismiss = { viewModel.dismissItemForm() },
             onSave = { name, quantity, category ->
@@ -573,25 +452,12 @@ fun ShoppingListsTab(
             title = { Text("Delete item") },
             text = { Text("Delete \"${item.name}\" from this list?") },
             confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmDeleteItem() },
-                    enabled = !state.isDeletingItem,
-                ) {
-                    if (state.isDeletingItem) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
+                TextButton(onClick = { viewModel.confirmDeleteItem() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { viewModel.dismissDeleteItem() },
-                    enabled = !state.isDeletingItem,
-                ) {
+                TextButton(onClick = { viewModel.dismissDeleteItem() }) {
                     Text("Cancel")
                 }
             },
@@ -610,11 +476,6 @@ private fun ShoppingListsOverview(
             state.isLoading && state.lists.isEmpty() ->
                 LoadingScreen(message = "Loading shopping lists…")
 
-            state.error != null && state.lists.isEmpty() -> TabError(
-                message = state.error.orEmpty(),
-                onRetry = { viewModel.loadLists() },
-            )
-
             state.lists.isEmpty() -> EmptyShoppingLists(
                 onCreate = { viewModel.openCreate() },
             )
@@ -623,7 +484,7 @@ private fun ShoppingListsOverview(
                 state.error?.let { message ->
                     ErrorBanner(
                         message = message,
-                        onRetry = { viewModel.loadLists() },
+                        onDismiss = { viewModel.dismissError() },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
@@ -740,6 +601,7 @@ private fun ShoppingListDetail(
 ) {
     val list = state.selectedList
     val canDelete = list != null && currentUserId != null && list.createdBy == currentUserId
+    val summary = list?.let { summaryOf(it, state) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -769,12 +631,12 @@ private fun ShoppingListDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (list != null) {
-                    IconButton(onClick = { viewModel.requestRename(summaryOf(list, state)) }) {
+                if (summary != null) {
+                    IconButton(onClick = { viewModel.requestRename(summary) }) {
                         Icon(Icons.Default.Edit, contentDescription = "Rename list")
                     }
                     if (canDelete) {
-                        IconButton(onClick = { viewModel.requestDelete(summaryOf(list, state)) }) {
+                        IconButton(onClick = { viewModel.requestDelete(summary) }) {
                             Icon(
                                 Icons.Default.Delete,
                                 contentDescription = "Delete list",
@@ -789,7 +651,7 @@ private fun ShoppingListDetail(
         state.detailError?.let { message ->
             ErrorBanner(
                 message = message,
-                onRetry = { state.selectedListId?.let(viewModel::selectList) },
+                onDismiss = { viewModel.dismissDetailError() },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
@@ -799,10 +661,8 @@ private fun ShoppingListDetail(
                 state.isLoadingDetail && state.items.isEmpty() ->
                     LoadingScreen(message = "Loading items…")
 
-                state.detailError != null && list == null -> TabError(
-                    message = state.detailError,
-                    onRetry = { state.selectedListId?.let(viewModel::selectList) },
-                )
+                list == null && state.items.isEmpty() ->
+                    MissingShoppingList(onBack = { viewModel.closeDetail() })
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -827,7 +687,6 @@ private fun ShoppingListDetail(
                         items(state.items, key = { "item-${it.id}" }) { item ->
                             ShoppingItemRow(
                                 item = item,
-                                isToggling = item.id in state.togglingItemIds,
                                 onToggle = { viewModel.toggleItem(item) },
                                 onEdit = { viewModel.openEditItem(item) },
                                 onDelete = { viewModel.requestDeleteItem(item) },
@@ -850,14 +709,16 @@ private fun ShoppingListDetail(
                 }
             }
 
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.openAddItem() },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Add item") },
-            )
+            if (list != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.openAddItem() },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Add item") },
+                )
+            }
         }
     }
 }
@@ -865,7 +726,6 @@ private fun ShoppingListDetail(
 @Composable
 private fun ShoppingItemRow(
     item: ShoppingListItemDto,
-    isToggling: Boolean,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -878,7 +738,6 @@ private fun ShoppingItemRow(
             Checkbox(
                 checked = item.isCompleted,
                 onCheckedChange = { onToggle() },
-                enabled = !isToggling,
             )
             Column(
                 modifier = Modifier
@@ -982,17 +841,23 @@ private fun EmptyShoppingLists(onCreate: () -> Unit) {
 }
 
 @Composable
-private fun TabError(
-    message: String,
-    onRetry: () -> Unit,
-) {
+private fun MissingShoppingList(onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        ErrorBanner(message = message, onRetry = onRetry)
+        Text(
+            text = "This shopping list is no longer available.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) {
+            Text("Back to lists")
+        }
     }
 }
 
@@ -1001,7 +866,6 @@ private fun NameDialog(
     title: String,
     label: String,
     initialName: String,
-    isSaving: Boolean,
     error: String?,
     confirmLabel: String,
     onDismiss: () -> Unit,
@@ -1019,7 +883,6 @@ private fun NameDialog(
                     onValueChange = { name = it },
                     label = { Text(label) },
                     singleLine = true,
-                    enabled = !isSaving,
                     isError = error != null,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1035,20 +898,13 @@ private fun NameDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(name) },
-                enabled = !isSaving && name.isNotBlank(),
+                enabled = name.isNotBlank(),
             ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(confirmLabel)
-                }
+                Text(confirmLabel)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
+            TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         },
@@ -1058,7 +914,6 @@ private fun NameDialog(
 @Composable
 private fun ShoppingItemDialog(
     editingItem: ShoppingListItemDto?,
-    isSaving: Boolean,
     error: String?,
     onDismiss: () -> Unit,
     onSave: (String, String, String) -> Unit,
@@ -1082,7 +937,6 @@ private fun ShoppingItemDialog(
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     singleLine = true,
-                    enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -1090,7 +944,6 @@ private fun ShoppingItemDialog(
                     onValueChange = { quantity = it },
                     label = { Text("Quantity (optional)") },
                     singleLine = true,
-                    enabled = !isSaving,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1099,7 +952,6 @@ private fun ShoppingItemDialog(
                     onValueChange = { category = it },
                     label = { Text("Category (optional)") },
                     singleLine = true,
-                    enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {
@@ -1114,20 +966,13 @@ private fun ShoppingItemDialog(
         confirmButton = {
             TextButton(
                 onClick = { onSave(name, quantity, category) },
-                enabled = !isSaving && name.isNotBlank(),
+                enabled = name.isNotBlank(),
             ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(if (editingItem == null) "Add" else "Save")
-                }
+                Text(if (editingItem == null) "Add" else "Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
+            TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         },
