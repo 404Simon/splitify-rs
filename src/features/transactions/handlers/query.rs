@@ -27,54 +27,23 @@ pub async fn get_transaction(
 
     let pool = expect_context::<SqlitePool>();
 
-    // Check user is member of group
-    let is_member = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM group_members WHERE group_id = ? AND user_id = ?",
-        group_id,
-        user.id
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
+    let details =
+        crate::features::transactions::service::get_transaction(&pool, user.id, transaction_id)
+            .await?;
 
-    if is_member == 0 {
-        return Err(ServerFnError::new(
-            "You are not a member of this group".to_string(),
-        ));
+    if details.group_id != group_id {
+        return Err(ServerFnError::new("Transaction not found".to_string()));
     }
 
-    // Fetch transaction
-    let record = sqlx::query!(
-        r#"
-        SELECT 
-            id as "id!",
-            group_id as "group_id!",
-            payer_id as "payer_id!",
-            recipient_id as "recipient_id!",
-            amount,
-            description,
-            created_at,
-            updated_at
-        FROM transactions
-        WHERE id = ? AND group_id = ?
-        "#,
-        transaction_id,
-        group_id
-    )
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?
-    .ok_or_else(|| ServerFnError::new("Transaction not found".to_string()))?;
-
     Ok(Transaction {
-        id: record.id,
-        group_id: record.group_id,
-        payer_id: record.payer_id,
-        recipient_id: record.recipient_id,
-        amount: record.amount,
-        description: record.description,
-        created_at: record.created_at,
-        updated_at: record.updated_at,
+        id: details.id,
+        group_id: details.group_id,
+        payer_id: details.payer_id,
+        recipient_id: details.recipient_id,
+        amount: details.amount,
+        description: details.description,
+        created_at: details.created_at,
+        updated_at: details.updated_at,
     })
 }
 
@@ -94,61 +63,5 @@ pub async fn get_group_transactions(
 
     let pool = expect_context::<SqlitePool>();
 
-    // Check user is member of group
-    let is_member = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM group_members WHERE group_id = ? AND user_id = ?",
-        group_id,
-        user.id
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    if is_member == 0 {
-        return Err(ServerFnError::new(
-            "You are not a member of this group".to_string(),
-        ));
-    }
-
-    // Fetch transactions with payer and recipient usernames
-    let records = sqlx::query!(
-        r#"
-        SELECT 
-            t.id as "id!",
-            t.group_id as "group_id!",
-            t.payer_id as "payer_id!",
-            payer.username as payer_username,
-            t.recipient_id as "recipient_id!",
-            recipient.username as recipient_username,
-            t.amount,
-            t.description,
-            t.created_at,
-            t.updated_at
-        FROM transactions t
-        JOIN users payer ON t.payer_id = payer.id
-        JOIN users recipient ON t.recipient_id = recipient.id
-        WHERE t.group_id = ?
-        ORDER BY t.created_at DESC
-        "#,
-        group_id
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    Ok(records
-        .into_iter()
-        .map(|r| TransactionWithDetails {
-            id: r.id,
-            group_id: r.group_id,
-            payer_id: r.payer_id,
-            payer_username: r.payer_username,
-            recipient_id: r.recipient_id,
-            recipient_username: r.recipient_username,
-            amount: r.amount,
-            description: r.description,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        })
-        .collect())
+    crate::features::transactions::service::list_group_transactions(&pool, user.id, group_id).await
 }

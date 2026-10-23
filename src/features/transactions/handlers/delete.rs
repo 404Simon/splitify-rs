@@ -23,28 +23,17 @@ pub async fn delete_transaction(group_id: i64, transaction_id: i64) -> Result<()
 
     let pool = expect_context::<SqlitePool>();
 
-    // Check transaction exists and user is the payer
     let existing = sqlx::query!(
-        "SELECT payer_id FROM transactions WHERE id = ? AND group_id = ?",
-        transaction_id,
-        group_id
+        "SELECT group_id FROM transactions WHERE id = ?",
+        transaction_id
     )
     .fetch_optional(&pool)
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?
-    .ok_or_else(|| ServerFnError::new("Transaction not found"))?;
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
 
-    if existing.payer_id != user.id {
-        return Err(ServerFnError::new(
-            "You can only delete your own transactions",
-        ));
+    if existing.is_none_or(|row| row.group_id != group_id) {
+        return Err(ServerFnError::new("Transaction not found"));
     }
 
-    // Delete transaction
-    sqlx::query!("DELETE FROM transactions WHERE id = ?", transaction_id)
-        .execute(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    Ok(())
+    crate::features::transactions::service::delete_transaction(&pool, user.id, transaction_id).await
 }

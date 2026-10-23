@@ -6,8 +6,6 @@ use tower_sessions::Session;
 
 #[cfg(feature = "ssr")]
 use crate::features::auth::utils::get_user_from_session;
-#[cfg(feature = "ssr")]
-use crate::validation::{validate_amount, validate_name};
 
 /// Server function: Update a shared debt
 #[server(UpdateSharedDebt)]
@@ -19,18 +17,6 @@ pub async fn update_shared_debt(
 ) -> Result<(), ServerFnError> {
     use sqlx::SqlitePool;
 
-    // Validate debt name
-    let name = validate_name(&name, 1, 255, "Debt name")?;
-
-    // Validate amount
-    let amount_decimal = validate_amount(&amount)?;
-
-    if member_ids.is_empty() {
-        return Err(ServerFnError::new(
-            "At least one member must be selected to split the debt",
-        ));
-    }
-
     let session = extract::<Session>()
         .await
         .map_err(|_| ServerFnError::new("Authentication error"))?;
@@ -41,81 +27,8 @@ pub async fn update_shared_debt(
 
     let pool = expect_context::<SqlitePool>();
 
-    // Check if user is the creator of the debt
-    let debt = sqlx::query!(
-        "SELECT created_by, group_id FROM shared_debts WHERE id = ?",
-        debt_id
+    crate::features::shared_debts::service::update_debt(
+        &pool, user.id, debt_id, name, amount, member_ids,
     )
-    .fetch_optional(&pool)
     .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?
-    .ok_or_else(|| ServerFnError::new("Shared debt not found"))?;
-
-    if debt.created_by != user.id {
-        return Err(ServerFnError::new("Only the creator can update this debt"));
-    }
-
-    // Validate all selected members are part of the group
-    for member_id in &member_ids {
-        let is_group_member = sqlx::query!(
-            "SELECT COUNT(*) as \"count!\" FROM group_members WHERE group_id = ? AND user_id = ?",
-            debt.group_id,
-            member_id
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-        if is_group_member.count == 0 {
-            return Err(ServerFnError::new(
-                "Some selected members are not part of this group",
-            ));
-        }
-    }
-
-    // Start a transaction
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    // Update the shared debt
-    let amount_str = amount_decimal.to_string();
-    sqlx::query!(
-        "UPDATE shared_debts SET name = ?, amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        name,
-        amount_str,
-        debt_id
-    )
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    // Remove all existing members
-    sqlx::query!(
-        "DELETE FROM shared_debt_user WHERE shared_debt_id = ?",
-        debt_id
-    )
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    // Add new members
-    for member_id in member_ids {
-        sqlx::query!(
-            "INSERT INTO shared_debt_user (shared_debt_id, user_id) VALUES (?, ?)",
-            debt_id,
-            member_id
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    }
-
-    // Commit transaction
-    tx.commit()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
-    Ok(())
 }

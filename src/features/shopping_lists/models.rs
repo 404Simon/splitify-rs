@@ -7,7 +7,9 @@ pub struct ShoppingList {
     pub group_id: i64,
     pub created_by: i64,
     pub name: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -42,9 +44,12 @@ pub struct ShoppingListItem {
     pub is_completed: bool,
     pub completed_by: Option<i64>,
     pub completed_by_username: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub completed_at: Option<OffsetDateTime>,
     pub position: i64,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -56,6 +61,7 @@ pub struct ShoppingListActivity {
     pub username: String,
     pub action: String,
     pub item_name: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
 }
 

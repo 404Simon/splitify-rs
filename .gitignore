@@ -14,3 +14,12 @@ public/maplibre/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/build/
+android/.idea/
+android/.kotlin/
+*.apk
+*.aab

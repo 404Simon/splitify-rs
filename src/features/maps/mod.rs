@@ -8,6 +8,7 @@ pub mod handlers;
 #[cfg(feature = "hydrate")]
 pub mod maplibre;
 pub mod models;
+pub mod service;
 pub mod utils;
 
 pub use handlers::*;

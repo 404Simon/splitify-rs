@@ -17,13 +17,19 @@ pub mod features {
 }
 
 #[cfg(feature = "ssr")]
+pub mod api;
+
+#[cfg(feature = "ssr")]
 pub mod db;
+
+#[cfg(feature = "ssr")]
+pub mod error;
 
 #[cfg(feature = "ssr")]
 pub mod session_store;
 
 #[cfg(feature = "ssr")]
-pub mod error;
+pub mod state;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]

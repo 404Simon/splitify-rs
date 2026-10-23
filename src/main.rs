@@ -15,6 +15,7 @@ async fn main() {
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
     use splitify::{
+        api,
         app::*,
         db::init_db,
         features::{
@@ -22,6 +23,7 @@ async fn main() {
             shopping_lists::{EventBroadcaster, create_broadcaster},
         },
         session_store::SqliteStore,
+        state::AppState,
     };
     use time::Duration;
     use tokio::sync::broadcast;
@@ -198,37 +200,39 @@ async fn main() {
         Sse::new(stream).keep_alive(KeepAlive::default())
     }
 
-    let sse_router = Router::new()
-        .route(
-            "/api/groups/{group_id}/shopping-lists/{list_id}/events",
-            get(shopping_list_events),
-        )
-        .with_state(broadcaster.clone());
+    let app_state = AppState {
+        leptos_options: leptos_options.clone(),
+        pool: pool.clone(),
+        broadcaster: broadcaster.clone(),
+    };
+
+    let sse_router: Router<AppState> = Router::new().route(
+        "/api/groups/{group_id}/shopping-lists/{list_id}/events",
+        get(shopping_list_events),
+    );
 
     let app = Router::new()
         .leptos_routes_with_context(
-            &leptos_options,
+            &app_state,
             routes,
             {
-                let leptos_options = leptos_options.clone();
-                let pool = pool.clone();
-                let broadcaster = broadcaster.clone();
+                let state = app_state.clone();
                 move || {
-                    provide_context(leptos_options.clone());
-                    provide_context(pool.clone());
-                    provide_context(broadcaster.clone());
+                    provide_context(state.leptos_options.clone());
+                    provide_context(state.pool.clone());
+                    provide_context(state.broadcaster.clone());
                 }
             },
             {
-                let leptos_options = leptos_options.clone();
+                let leptos_options = app_state.leptos_options.clone();
                 move || shell(leptos_options.clone())
             },
         )
         .merge(sse_router)
-        .fallback(leptos_axum::file_and_error_handler(shell))
+        .merge(api::router())
+        .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         .layer(ServiceBuilder::new().layer(session_layer))
-        .with_state(leptos_options)
-        .with_state(broadcaster);
+        .with_state(app_state);
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
@@ -236,9 +240,12 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("FATAL: Failed to bind to address - port may already be in use");
-    axum::serve(listener, app.into_make_service())
-        .await
-        .expect("FATAL: Server error during runtime");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .expect("FATAL: Server error during runtime");
 }
 
 #[cfg(not(feature = "ssr"))]
