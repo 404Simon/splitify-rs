@@ -1,5 +1,3 @@
-import com.android.build.api.variant.BuildConfigField
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -7,12 +5,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val debugApiBaseUrl: String = "http://10.0.2.2:3000/api/v1/"
-
-// Overridable via `-PapiBaseUrl=...` (e.g. a LAN address or the production host).
-// Release builds must use HTTPS: the network security config rejects cleartext,
-// and ApiClient refuses to start with a non-HTTPS URL outside debug builds.
-val configuredApiBaseUrl: String? = providers.gradleProperty("apiBaseUrl").orNull
+// The API server address is not compiled in: the user enters it on the sign-in
+// screen and the app remembers it (see `ServerConfig`). One APK therefore works
+// against the emulator, a LAN host and production without a rebuild.
 
 // Personal-device builds: sign the minified release APK with the local debug
 // key so it can update an already-installed debug build without uninstalling.
@@ -69,24 +64,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-    }
-}
-
-androidComponents {
-    onVariants { variant ->
-        val url = when (variant.buildType) {
-            "release" -> configuredApiBaseUrl
-                ?: "https://configure-apiBaseUrl.invalid/api/v1/"
-            else -> configuredApiBaseUrl ?: debugApiBaseUrl
-        }
-        variant.buildConfigFields?.put(
-            "API_BASE_URL",
-            BuildConfigField(
-                type = "String",
-                value = "\"$url\"",
-                comment = "Splitify REST API base URL",
-            ),
-        )
     }
 }
 

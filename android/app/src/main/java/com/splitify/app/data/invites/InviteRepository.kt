@@ -1,7 +1,8 @@
 package com.splitify.app.data.invites
 
-import com.splitify.app.BuildConfig
 import com.splitify.app.data.cache.LocalStore
+import com.splitify.app.data.config.ServerConfig
+import com.splitify.app.data.config.ServerUrl
 import com.splitify.app.data.dto.AcceptInviteResponse
 import com.splitify.app.data.dto.CreateInviteRequest
 import com.splitify.app.data.dto.InviteCreatedDto
@@ -19,6 +20,7 @@ class InviteRepository(
     private val api: ApiClient,
     private val localStore: LocalStore,
     private val syncManager: SyncManager,
+    private val serverConfig: ServerConfig,
 ) {
 
     fun observeInvites(groupId: Long): Flow<List<InviteListItemDto>> =
@@ -81,10 +83,13 @@ class InviteRepository(
         groupId
     }
 
-    fun inviteLink(uuid: String): String {
-        val origin = BuildConfig.API_BASE_URL
-            .trimEnd('/')
-            .removeSuffix("/api/v1")
+    /** Null when no server is configured, i.e. there is no origin to link to. */
+    fun inviteLink(uuid: String): String? {
+        val origin = serverConfig.baseUrl.value
+            ?.trimEnd('/')
+            ?.removeSuffix(ServerUrl.API_PREFIX)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
         return "$origin/invite/${uuid.trim()}"
     }
 

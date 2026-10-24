@@ -7,7 +7,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
@@ -26,23 +25,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
 
 class ApiClient(
-    baseUrl: String,
+    /**
+     * Resolved per request: the user chooses the server on the sign-in screen,
+     * so the client cannot capture it once at construction time.
+     */
+    private val baseUrlProvider: suspend () -> String?,
     private val tokenProvider: suspend () -> String?,
     private val onUnauthorized: suspend () -> Unit = {},
 ) {
-
-    private val baseUrl: String = baseUrl.trimEnd('/') + "/"
-
-    init {
-        // Fail fast on a release build pointed at plaintext HTTP or the build
-        // placeholder instead of silently sending bearer tokens in the clear.
-        check(
-            BuildConfig.DEBUG ||
-                (this.baseUrl.startsWith("https://") && !this.baseUrl.contains(".invalid")),
-        ) {
-            "Release builds require an HTTPS API base URL (set -PapiBaseUrl=https://...)."
-        }
-    }
 
     private val json = AppJson
 
@@ -67,10 +57,6 @@ class ApiClient(
             }
             level = if (BuildConfig.DEBUG) LogLevel.INFO else LogLevel.NONE
             sanitizeHeader { name -> name.equals(HttpHeaders.Authorization, ignoreCase = true) }
-        }
-
-        defaultRequest {
-            url(this@ApiClient.baseUrl)
         }
     }
 
@@ -155,11 +141,13 @@ class ApiClient(
         idempotencyKey: String? = null,
         explicitToken: String? = null,
     ): HttpResponse {
+        val baseUrl = baseUrlProvider()?.takeIf { it.isNotBlank() }
+            ?: throw ApiException.NotConfigured()
         val token = explicitToken
             ?: if (authenticated) tokenProvider() ?: throw ApiException.Unauthorized() else null
 
         val response = try {
-            client.request(path) {
+            client.request(absoluteUrl(baseUrl, path)) {
                 this.method = method
                 if (payload != null) {
                     contentType(ContentType.Application.Json)
@@ -225,6 +213,9 @@ class ApiClient(
 
         return ApiException.Http(statusCode = status.value, serverMessage = serverMessage)
     }
+
+    private fun absoluteUrl(baseUrl: String, path: String): String =
+        baseUrl.trimEnd('/') + "/" + path.trimStart('/')
 
     private companion object {
         const val IDEMPOTENCY_HEADER = "Idempotency-Key"

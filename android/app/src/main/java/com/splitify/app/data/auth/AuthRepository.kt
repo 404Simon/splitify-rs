@@ -4,6 +4,7 @@ import com.splitify.app.data.dto.AuthResponseDto
 import com.splitify.app.data.dto.LoginRequest
 import com.splitify.app.data.dto.RegisterRequest
 import com.splitify.app.data.cache.LocalStore
+import com.splitify.app.data.config.ServerConfig
 import com.splitify.app.data.dto.UserDto
 import com.splitify.app.data.network.ApiClient
 import com.splitify.app.data.network.apiResult
@@ -14,17 +15,39 @@ class AuthRepository(
     private val api: ApiClient,
     private val session: SessionManager,
     private val localStore: LocalStore,
+    private val serverConfig: ServerConfig,
 ) {
 
     val token: Flow<String?> = session.token
 
     val user: Flow<UserDto?> = session.user
 
-    suspend fun login(username: String, password: String): Result<UserDto> = apiResult {
+    suspend fun login(serverUrl: String, username: String, password: String): Result<UserDto> =
+        apiResult {
+            useServer(serverUrl)
+            val response = api.post(
+                path = "auth/login",
+                body = LoginRequest(username = username, password = password),
+                bodySerializer = LoginRequest.serializer(),
+                serializer = AuthResponseDto.serializer(),
+                authenticated = false,
+            )
+            session.save(response.token, response.user)
+            localStore.onUserChanged(response.user.id)
+            response.user
+        }
+
+    suspend fun register(
+        serverUrl: String,
+        username: String,
+        password: String,
+        email: String?,
+    ): Result<UserDto> = apiResult {
+        useServer(serverUrl)
         val response = api.post(
-            path = "auth/login",
-            body = LoginRequest(username = username, password = password),
-            bodySerializer = LoginRequest.serializer(),
+            path = "auth/register",
+            body = RegisterRequest(username = username, password = password, email = email),
+            bodySerializer = RegisterRequest.serializer(),
             serializer = AuthResponseDto.serializer(),
             authenticated = false,
         )
@@ -33,19 +56,21 @@ class AuthRepository(
         response.user
     }
 
-    suspend fun register(username: String, password: String, email: String?): Result<UserDto> =
-        apiResult {
-            val response = api.post(
-                path = "auth/register",
-                body = RegisterRequest(username = username, password = password, email = email),
-                bodySerializer = RegisterRequest.serializer(),
-                serializer = AuthResponseDto.serializer(),
-                authenticated = false,
-            )
-            session.save(response.token, response.user)
-            localStore.onUserChanged(response.user.id)
-            response.user
+    /**
+     * Points the client at [serverUrl] before the first request.
+     *
+     * A token and the cached groups belong to the server that issued them, so
+     * moving to a different server must drop both instead of leaking one
+     * deployment's data into the other.
+     */
+    private suspend fun useServer(serverUrl: String) {
+        val previous = serverConfig.current()
+        if (previous != null && previous != serverUrl) {
+            session.clear()
+            localStore.wipe()
         }
+        serverConfig.save(serverUrl)
+    }
 
     suspend fun me(): Result<UserDto> = apiResult {
         val user = api.get("auth/me", UserDto.serializer())

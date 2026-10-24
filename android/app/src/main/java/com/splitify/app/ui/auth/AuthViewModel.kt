@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.splitify.app.BuildConfig
 import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.auth.SessionManager
+import com.splitify.app.data.config.ServerConfig
+import com.splitify.app.data.config.ServerUrl
 import com.splitify.app.data.dto.UserDto
 import com.splitify.app.data.network.userMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,8 @@ sealed interface SessionState {
 
 data class AuthUiState(
     val session: SessionState = SessionState.Checking,
+    /** Server address field; seeded with the last server that was used, if any. */
+    val serverUrl: String = "",
     val isSubmitting: Boolean = false,
     val error: String? = null,
 )
@@ -32,12 +37,21 @@ data class AuthUiState(
 class AuthViewModel(
     private val authRepository: AuthRepository,
     private val sessionManager: SessionManager,
+    private val serverConfig: ServerConfig,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            serverConfig.baseUrl.collect { url ->
+                if (url.isNullOrBlank()) return@collect
+                _uiState.update { state ->
+                    if (state.serverUrl.isBlank()) state.copy(serverUrl = url) else state
+                }
+            }
+        }
         viewModelScope.launch {
             sessionManager.awaitReady()
             restoreSession()
@@ -52,13 +66,18 @@ class AuthViewModel(
         }
     }
 
+    fun setServerUrl(value: String) {
+        _uiState.update { it.copy(serverUrl = value) }
+    }
+
     fun login(username: String, password: String) {
         val name = username.trim()
         if (name.isBlank() || password.isBlank()) {
-            setError("Enter your username and password.")
+            setError("Enter your username, password and server address.")
             return
         }
-        submit { authRepository.login(name, password) }
+        val serverUrl = validatedServerUrl() ?: return
+        submit { authRepository.login(serverUrl, name, password) }
     }
 
     fun register(username: String, email: String, password: String, confirmPassword: String) {
@@ -68,14 +87,36 @@ class AuthViewModel(
                 setError("Username must be 3-50 characters: letters, numbers, _ or -.")
             password.length < 8 -> setError("Password must be at least 8 characters.")
             password != confirmPassword -> setError("Passwords do not match.")
-            else -> submit {
-                authRepository.register(
-                    username = name,
-                    password = password,
-                    email = email.trim().ifBlank { null },
-                )
+            else -> {
+                val serverUrl = validatedServerUrl() ?: return
+                submit {
+                    authRepository.register(
+                        serverUrl = serverUrl,
+                        username = name,
+                        password = password,
+                        email = email.trim().ifBlank { null },
+                    )
+                }
             }
         }
+    }
+
+    /**
+     * Validates and canonicalizes the server field before any request is made,
+     * so a typo fails with a clear message instead of a network error.
+     */
+    private fun validatedServerUrl(): String? {
+        val input = _uiState.value.serverUrl
+        val error = ServerUrl.errorFor(input, allowCleartext = BuildConfig.DEBUG)
+        if (error != null) {
+            setError(error)
+            return null
+        }
+        val normalized = ServerUrl.normalize(input) ?: return null
+        _uiState.update { state ->
+            if (state.serverUrl == normalized) state else state.copy(serverUrl = normalized)
+        }
+        return normalized
     }
 
     fun clearError() {
@@ -158,8 +199,9 @@ class AuthViewModel(
         fun factory(
             authRepository: AuthRepository,
             sessionManager: SessionManager,
+            serverConfig: ServerConfig,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { AuthViewModel(authRepository, sessionManager) }
+            initializer { AuthViewModel(authRepository, sessionManager, serverConfig) }
         }
     }
 }

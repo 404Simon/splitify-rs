@@ -59,27 +59,29 @@ sdk.dir=/path/to/Android/Sdk
 
 ## API base URL
 
-The base URL is compiled into `BuildConfig.API_BASE_URL`:
+The server address is **not** compiled into the APK. It is entered in the
+`Server URL` field on the sign-in screen and remembered afterwards, so one build
+can target the emulator, a LAN host or production without rebuilding.
 
-- Debug default: `http://10.0.2.2:3000/api/v1/` (the Android emulator reaches the
-  host machine at `10.0.2.2`).
-- Override per build, e.g. a physical device on your LAN:
+What you can type:
 
-```bash
-./gradlew assembleDebug -PapiBaseUrl=http://192.168.1.20:3000/api/v1/
-```
+| Input | Stored base URL |
+| --- | --- |
+| `splitify.example.com` | `https://splitify.example.com/api/v1/` |
+| `https://api.example.com/api/v1/` | `https://api.example.com/api/v1/` |
+| `http://10.0.2.2:3000` | `http://10.0.2.2:3000/api/v1/` |
+| `https://example.com/splitify` | `https://example.com/splitify/api/v1/` (a path is kept, `/api/v1/` is appended only when the path is empty) |
 
-- Release builds **must** use HTTPS and pass the URL explicitly:
-
-```bash
-./gradlew assembleRelease -PapiBaseUrl=https://api.example.com/api/v1/
-```
-
-Cleartext HTTP is permitted in the **debug** variant for any host so the app can reach
-a local `http://` API (`app/src/debug/res/xml/network_security_config.xml`); release
-uses `app/src/main/res/xml/network_security_config.xml`, which rejects cleartext
-everywhere. `ApiClient` also fails fast if a non-debug build is configured with a
-non-HTTPS URL or the build placeholder.
+- A missing scheme defaults to `https://`; type `http://` explicitly for a
+  cleartext dev server.
+- **Release builds only accept `https://`** (`ServerUrl.errorFor`). Debug builds
+  allow cleartext to any host so the app can reach a local API
+  (`app/src/debug/res/xml/network_security_config.xml`); release uses
+  `app/src/main/res/xml/network_security_config.xml`, which rejects cleartext
+  everywhere.
+- Changing the server at the sign-in screen also drops the stored token and the
+  local snapshot cache: a token and cached groups only make sense on the server
+  that issued them.
 
 ## Build and run
 
@@ -89,11 +91,8 @@ non-HTTPS URL or the build placeholder.
 ./gradlew installDebug           # install on a connected emulator/device
 ./gradlew lintDebug              # Android lint
 
-# build with a custom API base URL
-./gradlew assembleDebug -PapiBaseUrl=http://10.0.2.2:3000/api/v1/
-
-# release build (R8 minification + resource shrinking, HTTPS required)
-./gradlew assembleRelease -PapiBaseUrl=https://api.example.com/api/v1/
+# release build (R8 minification + resource shrinking)
+./gradlew assembleRelease
 ```
 
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`; the
@@ -139,27 +138,25 @@ cd android
 
 # emulator or USB device connected via adb:
 ./gradlew installDebug
-
-# physical device on the LAN (server bound to 0.0.0.0):
-./gradlew installDebug -PapiBaseUrl=http://<YOUR-LAN-IP>:3000/api/v1/
 ```
 
-- **Emulator**: the default `http://10.0.2.2:3000/api/v1/` already points at the
-  host's loopback, so no flag is needed.
+- **Emulator**: in the sign-in screen's **Server URL** field enter
+  `http://10.0.2.2:3000` (the emulator reaches the host's loopback via `10.0.2.2`).
 - **Physical device (recommended)**: use `adb reverse` so the phone reaches your
   machine's `127.0.0.1` over USB — no LAN IP or firewall setup needed:
 
   ```bash
   adb reverse tcp:3000 tcp:3000
-  ./gradlew installDebug -PapiBaseUrl=http://127.0.0.1:3000/api/v1/
   ```
 
-  `adb reverse` must be re-run after reconnecting the device or restarting adb.
-- **Physical device on Wi-Fi**: bind the server to `0.0.0.0` (see step 1) and pass
-  `-PapiBaseUrl=http://<LAN-IP>:3000/api/v1/`. Debug builds allow cleartext to any
-  host so this works over plain HTTP; release builds are HTTPS-only.
+  Then enter `http://127.0.0.1:3000` as the server. `adb reverse` must be re-run
+  after reconnecting the device or restarting adb.
+- **Physical device on Wi-Fi**: bind the server to `0.0.0.0` (see step 1) and enter
+  `http://<LAN-IP>:3000`. Debug builds allow cleartext to any host so this works
+  over plain HTTP; release builds are HTTPS-only.
 
-The APK is also written to `app/build/outputs/apk/debug/app-debug.apk`
+The server field remembers the last address, so it only has to be typed once per
+device. The APK is also written to `app/build/outputs/apk/debug/app-debug.apk`
 (`adb install -r <apk>` to sideload).
 
 ### Linux host prerequisites (adb access)

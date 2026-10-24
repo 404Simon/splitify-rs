@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +40,19 @@ fun LoginScreen(
         title = "Welcome back",
         subtitle = "Sign in to split expenses with your people — no spreadsheet required.",
     ) {
+        AuthTextField(
+            value = uiState.serverUrl,
+            onValueChange = viewModel::setServerUrl,
+            label = "Server URL",
+            icon = Icons.Default.Settings,
+            enabled = !uiState.isSubmitting,
+            supportingText = "e.g. https://splitify.example.com",
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            ),
+        )
+
         AuthTextField(
             value = username,
             onValueChange = { username = it },

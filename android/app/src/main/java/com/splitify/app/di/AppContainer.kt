@@ -1,11 +1,11 @@
 package com.splitify.app.di
 
 import android.content.Context
-import com.splitify.app.BuildConfig
 import com.splitify.app.data.auth.AuthRepository
 import com.splitify.app.data.auth.SessionManager
 import com.splitify.app.data.auth.TokenStore
 import com.splitify.app.data.cache.LocalStore
+import com.splitify.app.data.config.ServerConfig
 import com.splitify.app.data.debts.DebtRepository
 import com.splitify.app.data.groups.GroupRepository
 import com.splitify.app.data.invites.InviteRepository
@@ -37,8 +37,10 @@ class AppContainer(context: Context) {
 
     val session: SessionManager = SessionManager(tokenStore, scope)
 
+    val serverConfig: ServerConfig = ServerConfig(appContext, scope)
+
     private val apiClient: ApiClient = ApiClient(
-        baseUrl = BuildConfig.API_BASE_URL,
+        baseUrlProvider = { serverConfig.current() },
         tokenProvider = { session.token.value },
         onUnauthorized = { session.clear() },
     )
@@ -56,11 +58,13 @@ class AppContainer(context: Context) {
         store = localStore,
         session = session,
         connectivity = connectivity,
+        serverConfig = serverConfig,
         scope = scope,
         scheduleRetry = { SyncScheduler.request(appContext) },
     )
 
-    val authRepository: AuthRepository = AuthRepository(apiClient, session, localStore)
+    val authRepository: AuthRepository =
+        AuthRepository(apiClient, session, localStore, serverConfig)
 
     val groupRepository: GroupRepository = GroupRepository(localStore, syncManager, session)
 
@@ -69,7 +73,8 @@ class AppContainer(context: Context) {
     val transactionRepository: TransactionRepository =
         TransactionRepository(localStore, syncManager, session)
 
-    val inviteRepository: InviteRepository = InviteRepository(apiClient, localStore, syncManager)
+    val inviteRepository: InviteRepository =
+        InviteRepository(apiClient, localStore, syncManager, serverConfig)
 
     val shoppingListRepository: ShoppingListRepository =
         ShoppingListRepository(localStore, syncManager, session)

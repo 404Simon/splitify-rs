@@ -163,6 +163,24 @@ class LocalStore(
         }
     }
 
+    /**
+     * Drops every cached row. Used when the app is pointed at a different server:
+     * group ids and tokens from one deployment are meaningless on another.
+     */
+    suspend fun wipe() {
+        writeMutex.withLock {
+            snapshotDao.deleteAll()
+            snapshotDao.deleteGroups()
+            outboxDao.deleteAll()
+            idMappingDao.deleteAll()
+            metadataDao.clear()
+            _snapshots.value = emptyMap()
+            _idMappings.value = emptyMap()
+            _groups.value = emptyList()
+            mutationVersion++
+        }
+    }
+
     suspend fun groupSnapshot(groupId: Long): GroupSnapshotDto? {
         _snapshots.value[groupId]?.let { return it }
         loadSnapshot(groupId)?.let { loaded ->

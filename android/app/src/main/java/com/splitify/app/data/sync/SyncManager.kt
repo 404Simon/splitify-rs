@@ -5,6 +5,7 @@ import com.splitify.app.data.cache.EntityType
 import com.splitify.app.data.cache.LocalStore
 import com.splitify.app.data.cache.OperationType
 import com.splitify.app.data.cache.PendingOperation
+import com.splitify.app.data.config.ServerConfig
 import com.splitify.app.data.dto.CreateDebtRequest
 import com.splitify.app.data.dto.CreateGroupRequest
 import com.splitify.app.data.dto.CreateMarkerRequest
@@ -44,6 +45,7 @@ class SyncManager(
     private val store: LocalStore,
     private val session: SessionManager,
     private val connectivity: ConnectivityObserver,
+    private val serverConfig: ServerConfig,
     private val scope: CoroutineScope,
     private val scheduleRetry: () -> Unit = {},
 ) {
@@ -101,6 +103,7 @@ class SyncManager(
         session.awaitReady()
         store.awaitLoaded()
         mutex.withLock {
+            if (serverConfig.current() == null) return@withLock
             if (session.token.value == null || !connectivity.isOnline.value) return@withLock
             try {
                 val version = store.version()
@@ -124,6 +127,11 @@ class SyncManager(
     }
 
     private suspend fun syncLocked(): Boolean = mutex.withLock {
+        // Until the user has entered a server address there is nowhere to sync to.
+        if (serverConfig.current() == null) {
+            _status.value = SyncStatus.Idle
+            return@withLock true
+        }
         if (session.token.value == null) {
             _status.value = SyncStatus.Idle
             return@withLock true

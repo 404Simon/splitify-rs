@@ -33,6 +33,7 @@ fun AppRoot(container: AppContainer) {
         factory = AuthViewModel.factory(
             authRepository = container.authRepository,
             sessionManager = container.session,
+            serverConfig = container.serverConfig,
         ),
     )
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +56,19 @@ fun RegisterScreen(
         title = "Create your account",
         subtitle = "One place for shared expenses, balances and plans with your groups.",
     ) {
+        AuthTextField(
+            value = uiState.serverUrl,
+            onValueChange = viewModel::setServerUrl,
+            label = "Server URL",
+            icon = Icons.Default.Settings,
+            enabled = !uiState.isSubmitting,
+            supportingText = "e.g. https://splitify.example.com",
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            ),
+        )
+
         AuthTextField(
             value = username,
             onValueChange = { username = it },

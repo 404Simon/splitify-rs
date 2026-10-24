@@ -10,6 +10,9 @@ sealed class ApiException(message: String, cause: Throwable? = null) : Exception
 
     class Unauthorized : ApiException("Your session has expired. Please sign in again.")
 
+    class NotConfigured :
+        ApiException("No server address is set. Sign in with your server address.")
+
     class Network(cause: Throwable) :
         ApiException("Could not reach the server. Check your connection.", cause)
 
