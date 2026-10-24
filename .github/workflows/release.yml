@@ -10,8 +10,16 @@ jobs:
       contents: write
     uses: ./.github/workflows/build-artifacts.yml
 
+  build-android:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android-release.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets: inherit
+
   upload-release-assets:
-    needs: [build-artifacts]
+    needs: [build-artifacts, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,14 +42,12 @@ jobs:
           echo "Uploading artifacts for release $TAG_NAME..." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          for dir in */; do
-            archive=$(find "$dir" -type f \( -name "*.tar.gz" -o -name "*.zip" \) | head -n 1)
-            if [ -n "$archive" ]; then
-              echo "- Uploading: $archive" >> $GITHUB_STEP_SUMMARY
-              gh release upload "$TAG_NAME" "$archive" --clobber
-            fi
-          done
-          
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.apk" -o -name "*.sha256" \) -print0 |
+            while IFS= read -r -d '' asset; do
+              echo "- Uploading: $asset" >> $GITHUB_STEP_SUMMARY
+              gh release upload "$TAG_NAME" "$asset" --clobber
+            done
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "All artifacts uploaded successfully!" >> $GITHUB_STEP_SUMMARY
 

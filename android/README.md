@@ -98,6 +98,73 @@ What you can type:
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`; the
 unsigned release APK to `app/build/outputs/apk/release/app-release-unsigned.apk`.
 
+## Release build (CI)
+
+Releases are built by GitHub Actions, never on a workstation:
+
+1. Actions → **Create Release** → *Run workflow* → choose `major`/`minor`/`patch`.
+2. That bumps `Cargo.toml`, pushes a `vX.Y.Z` tag and publishes a GitHub Release.
+3. The published release triggers `release.yml`, which also calls
+   `android-release.yml`. It runs the unit tests, builds the signed APK, and
+   `upload-release-assets` attaches it to the release as
+   `splitify-vX.Y.Z-android.apk` (plus a `.sha256`).
+
+`versionName` comes from the tag (`v1.2.3` → `1.2.3`); `versionCode` is
+`major * 10000 + minor * 100 + patch` (→ `10203`), so it always increases.
+`android-release.yml` can also be dispatched directly to test the pipeline: it
+builds a `-dev` artifact without touching a release.
+
+Required repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 splitify-release.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | `splitify` |
+| `ANDROID_KEY_PASSWORD` | key password |
+
+They were created from `android/keystore/splitify-release.jks` +
+`android/keystore.properties` (both gitignored). **Back these two files up** —
+Android only installs updates signed with the same key, so losing them forces
+every user to uninstall and reinstall.
+
+To recreate the key elsewhere:
+
+```bash
+keytool -genkeypair -v \
+  -keystore splitify-release.jks -alias splitify \
+  -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 splitify-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body splitify
+gh secret set ANDROID_KEY_PASSWORD
+```
+
+### Local signed release
+
+For testing the minified/signed build on your own device, create
+`android/keystore.properties` (gitignored):
+
+```properties
+storeFile=keystore/splitify-release.jks
+storePassword=…
+keyAlias=splitify
+keyPassword=…
+```
+
+Then:
+
+```bash
+cd android
+./gradlew :app:assembleRelease -PversionName=0.1.0 -PversionCode=1
+adb install -r app/build/outputs/apk/release/app-release.apk
+"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs \
+  app/build/outputs/apk/release/app-release.apk
+```
+
+Without signing configuration a release build still succeeds, but the APK is
+`app-release-unsigned.apk` and cannot be installed.
+
 ### Gradle wrapper
 
 The wrapper (`gradlew`, `gradle/wrapper/`) targets Gradle 9.8.2. If it is missing,

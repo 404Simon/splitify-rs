@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -8,6 +10,33 @@ plugins {
 // The API server address is not compiled in: the user enters it on the sign-in
 // screen and the app remembers it (see `ServerConfig`). One APK therefore works
 // against the emulator, a LAN host and production without a rebuild.
+
+// Version: local builds use the defaults below, the release workflow passes the
+// tag it is building, e.g. -PversionName=1.2.3 -PversionCode=10203.
+val appVersionName: String = providers.gradleProperty("versionName").orNull ?: "0.1.0"
+val appVersionCode: Int = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 1
+
+// Release signing. GitHub Actions injects the keystore through environment
+// variables; local builds read android/keystore.properties (both gitignored).
+// Without either, `assembleRelease` still works but produces an unsigned APK.
+val keystoreProperties = Properties().apply {
+    val propertiesFile = rootProject.file("keystore.properties")
+    if (propertiesFile.exists()) propertiesFile.inputStream().use { load(it) }
+}
+
+fun signingValue(environmentName: String, propertyName: String): String? =
+    providers.environmentVariable(environmentName).orNull?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+
+val releaseKeystorePath: String? = signingValue("SPLITIFY_KEYSTORE_PATH", "storeFile")
+val releaseKeystorePassword: String? =
+    signingValue("SPLITIFY_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias: String? = signingValue("SPLITIFY_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword: String? = signingValue("SPLITIFY_KEY_PASSWORD", "keyPassword")
+val hasReleaseSigning: Boolean = releaseKeystorePath != null &&
+    releaseKeystorePassword != null &&
+    releaseKeyAlias != null &&
+    releaseKeyPassword != null
 
 // Personal-device builds: sign the minified release APK with the local debug
 // key so it can update an already-installed debug build without uninstalling.
@@ -29,8 +58,22 @@ android {
         targetSdk {
             version = release(36)
         }
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                // v1 signatures are only needed for API < 24; minSdk is 26.
+                enableV1Signing = false
+                enableV2Signing = true
+            }
+        }
     }
 
     buildTypes {
@@ -44,8 +87,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            if (useDebugSigning) {
-                signingConfig = signingConfigs.getByName("debug")
+            when {
+                hasReleaseSigning -> signingConfig = signingConfigs.getByName("release")
+                useDebugSigning -> signingConfig = signingConfigs.getByName("debug")
             }
         }
     }

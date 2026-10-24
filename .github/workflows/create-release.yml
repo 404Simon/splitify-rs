@@ -117,4 +117,15 @@ jobs:
           Download the binary assets below, extract it, and run:
           \`\`\`bash
           ./run.sh
-          \`\`\`"
+          \`\`\`
+
+          ### Android
+
+          Download and sideload the signed APK attached to this release:
+
+          \`\`\`bash
+          adb install -r splitify-v${NEW_VERSION}-android.apk
+          \`\`\`
+
+          On the sign-in screen enter your server address over HTTPS (release builds
+          refuse plain HTTP)."
