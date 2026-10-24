@@ -68,10 +68,19 @@ jobs:
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          set -euo pipefail
+          SDKMANAGER="${ANDROID_HOME:?ANDROID_HOME is not set on this runner}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find -L "$ANDROID_HOME" -path "*/cmdline-tools/*/bin/sdkmanager" -type f | sort -V | tail -n 1)
+          fi
+          test -n "$SDKMANAGER" || { echo "::error::sdkmanager not found"; exit 1; }
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
 
-      - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          # `sdkmanager tools` no longer exists in cmdline-tools 16, so the
+          # android-actions/setup-android action cannot be used here.
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
 
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
