@@ -107,7 +107,7 @@ Releases are built by GitHub Actions, never on a workstation:
 3. The published release triggers `release.yml`, which also calls
    `android-release.yml`. It runs the unit tests, builds the signed APK, and
    `upload-release-assets` attaches it to the release as
-   `splitify-vX.Y.Z-android.apk` (plus a `.sha256`).
+   `splitify-X.Y.Z-android.apk` (plus a `.sha256`).
 
 `versionName` comes from the tag (`v1.2.3` → `1.2.3`); `versionCode` is
 `major * 10000 + minor * 100 + patch` (→ `10203`), so it always increases.

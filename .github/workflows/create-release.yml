@@ -124,7 +124,7 @@ jobs:
           Download and sideload the signed APK attached to this release:
 
           \`\`\`bash
-          adb install -r splitify-v${NEW_VERSION}-android.apk
+          adb install -r splitify-${NEW_VERSION}-android.apk
           \`\`\`
 
           On the sign-in screen enter your server address over HTTPS (release builds
