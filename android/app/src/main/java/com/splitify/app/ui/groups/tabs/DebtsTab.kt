@@ -16,23 +16,28 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,7 +50,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -60,8 +64,17 @@ import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.dto.SharedDebtDto
 import com.splitify.app.data.dto.UserShareDto
 import com.splitify.app.data.network.userMessage
+import com.splitify.app.ui.components.Avatar
+import com.splitify.app.ui.components.AvatarStack
+import com.splitify.app.ui.components.EmptyState
 import com.splitify.app.ui.components.ErrorBanner
+import com.splitify.app.ui.components.IconBubble
 import com.splitify.app.ui.components.LoadingScreen
+import com.splitify.app.ui.components.MoneyText
+import com.splitify.app.ui.components.SplitifyCard
+import com.splitify.app.ui.format.formatMoney
+import com.splitify.app.ui.format.splitEvenly
+import com.splitify.app.ui.theme.splitify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -226,22 +239,30 @@ fun DebtsTab(
         when {
             state.isLoading && state.debts.isEmpty() -> LoadingScreen(message = "Loading debts…")
 
-            state.debts.isEmpty() -> EmptyDebts(onCreate = { viewModel.openCreate() })
+            state.debts.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(
+                    icon = Icons.AutoMirrored.Filled.List,
+                    title = "No shared debts yet",
+                    message = "Add an expense once and Splitify works out who owes what.",
+                    actionLabel = "Add a debt",
+                    onAction = { viewModel.openCreate() },
+                )
+            }
 
             else -> Column(modifier = Modifier.fillMaxSize()) {
                 state.actionError?.let { message ->
                     ErrorBanner(
                         message = message,
                         onDismiss = { viewModel.dismissActionError() },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 4.dp,
                         bottom = 96.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -264,6 +285,9 @@ fun DebtsTab(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("New debt") },
             )
@@ -292,6 +316,7 @@ fun DebtsTab(
     state.deleteTarget?.let { debt ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissDelete() },
+            shape = RoundedCornerShape(28.dp),
             title = { Text("Delete debt") },
             text = { Text("Delete \"${debt.name}\"? This cannot be undone.") },
             confirmButton = {
@@ -315,83 +340,103 @@ private fun DebtCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = debt.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "Created by ${debt.creatorUsername}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = debt.amount,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (debt.isCreator) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit debt")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete debt",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
+    var menuExpanded by remember { mutableStateOf(false) }
 
-            if (shares.isNotEmpty()) {
+    SplitifyCard(contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(
+                icon = Icons.AutoMirrored.Filled.List,
+                size = 44.dp,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Split: " + shares.joinToString(" · ") {
-                        "${it.username} ${it.shareAmount}"
-                    },
+                    text = debt.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Added by ${debt.creatorUsername}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Column(horizontalAlignment = Alignment.End) {
+                MoneyText(
+                    amount = debt.amount,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "total",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (debt.isCreator) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Debt options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
+            }
         }
-    }
-}
 
-@Composable
-private fun EmptyDebts(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(text = "No shared debts yet", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Add a shared expense to split it among group members.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
-            Text("Add debt")
+        if (shares.isNotEmpty()) {
+            Spacer(Modifier.size(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AvatarStack(
+                    people = shares.map { it.userId to it.username },
+                    size = 26.dp,
+                    max = 4,
+                    ringColor = MaterialTheme.splitify.card,
+                )
+                Spacer(Modifier.width(10.dp))
+                val each = shares.map { it.shareAmount }.distinct().singleOrNull()
+                Text(
+                    text = if (each != null) {
+                        "${formatMoney(each)} each · split ${shares.size} ways"
+                    } else {
+                        "Split ${shares.size} ways"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -411,34 +456,65 @@ private fun DebtFormDialog(
     var name by rememberSaveable { mutableStateOf(initialName) }
     var amount by rememberSaveable { mutableStateOf(initialAmount) }
     val selectedMemberIds = remember { mutableStateListOf<Long>().apply { addAll(initialMemberIds) } }
+    val eachShare = splitEvenly(amount, selectedMemberIds.size)
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(if (isEditing) "Edit debt" else "New debt") },
         text = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = 420.dp)
+                    .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
+                    label = { Text("What was it for?") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
                     label = { Text("Amount") },
+                    prefix = { Text("€ ") },
                     singleLine = true,
                     enabled = !isSaving,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                if (eachShare != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Each pays",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = formatMoney(eachShare),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                    }
+                }
+
                 Text(
                     text = "Split between",
                     style = MaterialTheme.typography.labelLarge,
@@ -446,32 +522,42 @@ private fun DebtFormDialog(
                 )
                 members.forEach { member ->
                     val checked = selectedMemberIds.contains(member.id)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isSaving) {
+                    Surface(
+                        onClick = {
+                            if (!isSaving) {
                                 if (checked) {
                                     selectedMemberIds.remove(member.id)
                                 } else {
                                     selectedMemberIds.add(member.id)
                                 }
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
+                            }
+                        },
+                        enabled = !isSaving,
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (checked) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerLow
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = { value ->
-                                if (value) {
-                                    if (!selectedMemberIds.contains(member.id)) {
-                                        selectedMemberIds.add(member.id)
-                                    }
-                                } else {
-                                    selectedMemberIds.remove(member.id)
-                                }
-                            },
-                            enabled = !isSaving,
-                        )
-                        Text(text = member.username)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Avatar(name = member.username, seed = member.id, size = 32.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = member.username,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null,
+                                enabled = !isSaving,
+                            )
+                        }
                     }
                 }
                 error?.let {

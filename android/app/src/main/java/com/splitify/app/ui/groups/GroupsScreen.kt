@@ -1,6 +1,6 @@
 package com.splitify.app.ui.groups
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,23 +10,25 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,23 +38,36 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.splitify.app.data.dto.GroupSummaryDto
+import com.splitify.app.ui.components.Avatar
+import com.splitify.app.ui.components.BrandMark
+import com.splitify.app.ui.components.EmptyState
 import com.splitify.app.ui.components.LoadingScreen
+import com.splitify.app.ui.components.Pill
+import com.splitify.app.ui.components.SectionHeader
+import com.splitify.app.ui.components.SplitifyCard
+import com.splitify.app.ui.format.relativeDate
+import com.splitify.app.ui.theme.splitify
+import java.time.LocalTime
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupsScreen(
     viewModel: GroupsViewModel,
@@ -68,93 +83,80 @@ fun GroupsScreen(
         }
     }
 
+    val totalMembers = state.groups.sumOf { it.memberCount }
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Groups")
-                        username?.let {
-                            Text(
-                                text = "Signed in as $it",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = viewModel::load,
-                        enabled = !state.isLoggingOut,
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh groups")
-                    }
-                    IconButton(
-                        onClick = { viewModel.setAcceptDialogVisible(true) },
-                        enabled = !state.isLoggingOut,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Join with invite",
-                        )
-                    }
-                    IconButton(
-                        onClick = { viewModel.logout() },
-                        enabled = !state.isLoggingOut,
-                    ) {
-                        if (state.isLoggingOut) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = "Log out",
-                            )
-                        }
-                    }
-                },
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { viewModel.setCreateDialogVisible(true) },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("New group") },
             )
         },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
-        ) {
-            when {
-                state.isLoading && state.groups.isEmpty() -> LoadingScreen(message = "Loading groups…")
+        if (state.isLoading && state.groups.isEmpty()) {
+            Box(Modifier.padding(padding).fillMaxSize()) {
+                LoadingScreen(message = "Loading your groups…")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 112.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item(key = "header") {
+                    GroupsHeader(
+                        username = username,
+                        isLoggingOut = state.isLoggingOut,
+                        onJoin = { viewModel.setAcceptDialogVisible(true) },
+                        onRefresh = viewModel::load,
+                        onLogout = viewModel::logout,
+                    )
+                }
 
-                state.groups.isEmpty() -> EmptyGroups(
-                    onCreate = { viewModel.setCreateDialogVisible(true) },
-                )
+                item(key = "hero") {
+                    GroupsHero(
+                        groupCount = state.groups.size,
+                        memberCount = totalMembers,
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                }
 
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 8.dp,
-                            bottom = 96.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(state.groups, key = { it.id }) { group ->
-                            GroupCard(
-                                group = group,
-                                onClick = { onOpenGroup(group.id) },
-                            )
-                        }
+                if (state.groups.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyState(
+                            icon = Icons.Default.Person,
+                            title = "No groups yet",
+                            message = "Create your first group and invite the people you share expenses with.",
+                            actionLabel = "Create a group",
+                            onAction = { viewModel.setCreateDialogVisible(true) },
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
+                } else {
+                    item(key = "section") {
+                        SectionHeader(
+                            title = "Your groups",
+                            subtitle = if (state.groups.size == 1) {
+                                "1 group"
+                            } else {
+                                "${state.groups.size} groups"
+                            },
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp),
+                        )
+                    }
+                    items(state.groups, key = { it.id }) { group ->
+                        GroupCard(
+                            group = group,
+                            onClick = { onOpenGroup(group.id) },
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
                     }
                 }
             }
@@ -181,6 +183,255 @@ fun GroupsScreen(
 }
 
 @Composable
+private fun GroupsHeader(
+    username: String?,
+    isLoggingOut: Boolean,
+    onJoin: () -> Unit,
+    onRefresh: () -> Unit,
+    onLogout: () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val greeting = remember {
+        when (LocalTime.now().hour) {
+            in 0..11 -> "Good morning"
+            in 12..17 -> "Good afternoon"
+            else -> "Good evening"
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 12.dp, top = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BrandMark(size = 44.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = greeting,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = username ?: "Splitify",
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        HeaderAction(
+            icon = Icons.Default.Add,
+            contentDescription = "Join with invite",
+            enabled = !isLoggingOut,
+            onClick = onJoin,
+        )
+        Spacer(Modifier.width(4.dp))
+        if (isLoggingOut) {
+            Box(
+                modifier = Modifier.size(44.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+        } else {
+            Box {
+                HeaderAction(
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = "More options",
+                    enabled = true,
+                    onClick = { menuExpanded = true },
+                )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Refresh") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onRefresh()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Log out") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onLogout()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeaderAction(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(44.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(21.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupsHero(
+    groupCount: Int,
+    memberCount: Long,
+    modifier: Modifier = Modifier,
+) {
+    val gradient = MaterialTheme.splitify.heroGradient
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(Brush.linearGradient(gradient)),
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = 250.dp, y = (-40).dp)
+                .size(160.dp)
+                .background(Color.White.copy(alpha = 0.09f), CircleShape),
+        )
+        Box(
+            modifier = Modifier
+                .offset(x = (-40).dp, y = 90.dp)
+                .size(120.dp)
+                .background(Color.White.copy(alpha = 0.06f), CircleShape),
+        )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = "YOUR SPACE",
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.8.sp,
+                color = Color.White.copy(alpha = 0.72f),
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HeroStat(value = groupCount.toString(), label = "groups")
+                Spacer(Modifier.width(20.dp))
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(38.dp)
+                        .background(Color.White.copy(alpha = 0.22f)),
+                )
+                Spacer(Modifier.width(20.dp))
+                HeroStat(value = memberCount.toString(), label = "people")
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "Everything split fairly, all in one place.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.75f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeroStat(value: String, label: String) {
+    Column {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineLarge,
+            color = Color.White,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White.copy(alpha = 0.72f),
+        )
+    }
+}
+
+@Composable
+private fun GroupCard(
+    group: GroupSummaryDto,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SplitifyCard(onClick = onClick, modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(name = group.name, seed = group.id, size = 52.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (group.isAdmin) {
+                        Spacer(Modifier.width(8.dp))
+                        Pill(
+                            text = "Admin",
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = if (group.memberCount == 1L) {
+                        "1 member"
+                    } else {
+                        "${group.memberCount} members"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                relativeDate(group.updatedAt)?.let { updated ->
+                    Text(
+                        text = when (updated) {
+                            "Today" -> "Active today"
+                            "Yesterday" -> "Active yesterday"
+                            else -> "Active $updated"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun AcceptInviteDialog(
     isAccepting: Boolean,
     error: String?,
@@ -191,12 +442,14 @@ private fun AcceptInviteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Join with invite") },
+        shape = RoundedCornerShape(28.dp),
+        title = { Text("Join a group") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "Paste the invite link or code you received.",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
                     value = inviteInput,
@@ -205,6 +458,7 @@ private fun AcceptInviteDialog(
                     singleLine = true,
                     enabled = !isAccepting,
                     isError = error != null,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {
@@ -240,106 +494,6 @@ private fun AcceptInviteDialog(
 }
 
 @Composable
-private fun GroupCard(
-    group: GroupSummaryDto,
-    onClick: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(44.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(imageVector = Icons.Default.Person, contentDescription = null)
-                }
-            }
-
-            Spacer(Modifier.width(14.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = group.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val memberLabel = if (group.memberCount == 1L) "member" else "members"
-                Text(
-                    text = "${group.memberCount} $memberLabel",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (group.isAdmin) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                ) {
-                    Text(
-                        text = "Admin",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-            }
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmptyGroups(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Person,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(44.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(text = "No groups yet", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Create your first group to start splitting expenses.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(20.dp))
-        Button(onClick = onCreate) {
-            Text("Create group")
-        }
-    }
-}
-
-@Composable
 private fun CreateGroupDialog(
     isCreating: Boolean,
     error: String?,
@@ -350,9 +504,15 @@ private fun CreateGroupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text("New group") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Give your group a name — you can invite people right after.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -360,6 +520,7 @@ private fun CreateGroupDialog(
                     singleLine = true,
                     enabled = !isCreating,
                     isError = error != null,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {
@@ -382,7 +543,7 @@ private fun CreateGroupDialog(
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    Text("Create")
+                    Text("Create", fontWeight = FontWeight.SemiBold)
                 }
             }
         },

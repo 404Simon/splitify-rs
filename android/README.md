@@ -215,15 +215,32 @@ app/src/main/java/com/splitify/app/
 │   ├── recurring/              # RecurringDebtRepository
 │   └── maps/                   # MapMarkerRepository
 └── ui/
-    ├── theme/                  # Material 3 color scheme + typography
+    ├── theme/                  # brand palette, type scale, shapes, semantic colors
+    ├── format/                 # EUR money + date formatters
     ├── AppRoot.kt              # session gate (splash -> auth -> main) + SyncBanner
     ├── navigation/AppNavHost.kt
-    ├── auth/                   # AuthViewModel, LoginScreen, RegisterScreen
+    ├── auth/                   # AuthViewModel, AuthScaffold, LoginScreen, RegisterScreen
     ├── groups/                 # GroupsViewModel/Screen, GroupDetailViewModel/Screen
     │   └── tabs/               # DebtsTab, TransactionsTab, BalancesTab, InvitesTab,
     │                           # ShoppingListsTab, RecurringDebtsTab, PlacesTab
-    └── components/             # LoadingScreen, ErrorBanner, SyncBanner
+    └── components/             # SplitifyCard, Avatar/AvatarStack, MoneyText, PillTabRow,
+                                # EmptyState, ErrorBanner, LoadingScreen, SyncBanner
 ```
+
+### UI design system
+
+- **Brand first**: `SplitifyTheme` ships a hand-tuned deep-teal / mint palette and
+  deliberately keeps Material You dynamic color **off** so totals and balance colors
+  stay legible and the app keeps its identity on every wallpaper.
+- **Shared building blocks**: cards (`SplitifyCard`), initials avatars (`Avatar` /
+  `AvatarStack`), pill tabs (`PillTabRow`) and empty states (`EmptyState`) live in
+  `ui/components/` and are used by every screen.
+- **Money is always EUR**: never render a raw amount. Use `MoneyText` or
+  `formatMoney()` from `ui/format/Formatters.kt`; it parses the server decimal string
+  and formats it as `12,50 €` / `€12.50` depending on the device locale. Amount inputs
+  show a `€` prefix and a live "each pays" preview where an even split applies.
+- **Dark mode**: every color role (including `surfaceContainer*`) is defined for both
+  themes; no screen relies on the purple-ish Material defaults.
 
 ### Offline-first data flow
 

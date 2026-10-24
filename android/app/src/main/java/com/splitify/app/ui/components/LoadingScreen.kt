@@ -24,10 +24,14 @@ fun LoadingScreen(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier.padding(24.dp),
         ) {
-            CircularProgressIndicator()
+            BrandMark(size = 56.dp)
+            CircularProgressIndicator(
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,

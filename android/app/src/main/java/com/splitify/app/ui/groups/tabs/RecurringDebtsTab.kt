@@ -1,6 +1,25 @@
 package com.splitify.app.ui.groups.tabs
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import com.splitify.app.ui.components.Avatar
+import com.splitify.app.ui.components.EmptyState
+import com.splitify.app.ui.components.IconBubble
+import com.splitify.app.ui.components.MoneyText
+import com.splitify.app.ui.components.Pill
+import com.splitify.app.ui.components.SplitifyCard
+import com.splitify.app.ui.format.formatMoney
+import com.splitify.app.ui.format.splitEvenly
+import com.splitify.app.ui.theme.splitify
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -544,142 +563,237 @@ private fun RecurringDebtCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = debt.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "Created by ${debt.creatorUsername}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = debt.amount,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+    var menuExpanded by remember { mutableStateOf(false) }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                StatusChip(status = debt.status)
-                Text(
-                    text = frequencyLabel(debt.frequency),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Text(
-                text = "Next generation ${debt.nextGenerationDate}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    SplitifyCard(contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(
+                icon = Icons.Default.DateRange,
+                size = 44.dp,
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
             )
-            debt.endDate?.let { endDate ->
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Ends $endDate",
+                    text = debt.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Added by ${debt.creatorUsername}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                TextButton(onClick = onToggleExpanded) {
-                    Text(if (expanded) "Hide details" else "Details")
-                }
-                if (debt.isCreator) {
-                    TextButton(onClick = onToggleActive, enabled = !isToggling) {
-                        if (isToggling) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text(if (debt.isActive) "Pause" else "Resume")
-                        }
-                    }
-                    TextButton(onClick = onGenerate, enabled = !isGenerating) {
-                        if (isGenerating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text("Generate now")
-                        }
-                    }
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit recurring debt")
-                    }
-                    IconButton(onClick = onDelete) {
+            Column(horizontalAlignment = Alignment.End) {
+                MoneyText(
+                    amount = debt.amount,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "per ${frequencyUnit(debt.frequency)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (debt.isCreator) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
                         Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete recurring debt",
-                            tint = MaterialTheme.colorScheme.error,
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Recurring debt options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (debt.isActive) "Pause" else "Resume") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (debt.isActive) {
+                                        Icons.Default.Clear
+                                    } else {
+                                        Icons.Default.PlayArrow
+                                    },
+                                    contentDescription = null,
+                                )
+                            },
+                            enabled = !isToggling,
+                            onClick = {
+                                menuExpanded = false
+                                onToggleActive()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Generate now") },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                            enabled = !isGenerating,
+                            onClick = {
+                                menuExpanded = false
+                                onGenerate()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StatusChip(status = debt.status)
+            Text(
+                text = frequencyLabel(debt.frequency),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            if (isToggling || isGenerating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            text = if (debt.isActive) "Next on ${debt.nextGenerationDate}" else "Paused",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        debt.endDate?.let { endDate ->
+            Text(
+                text = "Ends on $endDate",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        TextButton(
+            onClick = onToggleExpanded,
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+        ) {
+            Text(if (expanded) "Hide details" else "Show details")
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Default.KeyboardArrowUp
+                } else {
+                    Icons.Default.KeyboardArrowDown
+                },
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+
+        if (expanded) {
+            HorizontalDivider(color = MaterialTheme.splitify.cardBorder)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = if (memberIds.isEmpty()) {
+                    "Split between ${shares.size} members"
+                } else {
+                    "Split between ${memberIds.size} members"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (shares.isEmpty()) {
+                Text(
+                    text = "No shares available.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                shares.forEach { share ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Avatar(name = share.username, seed = share.userId, size = 26.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = share.username,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MoneyText(
+                            amount = share.shareAmount,
+                            style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
             }
 
-            if (expanded) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Recent instances",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (instances.isEmpty()) {
                 Text(
-                    text = if (memberIds.isEmpty()) {
-                        "Split between ${shares.size} members"
-                    } else {
-                        "Split between ${memberIds.size} members"
-                    },
-                    style = MaterialTheme.typography.labelLarge,
+                    text = "No instances generated yet.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (shares.isEmpty()) {
-                    Text(
-                        text = "No shares available.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    shares.forEach { share ->
+            } else {
+                instances.take(5).forEach { instance ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = "${share.username} · ${share.shareAmount}",
+                            text = instance.debtName,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MoneyText(
+                            amount = instance.amount,
                             style = MaterialTheme.typography.bodySmall,
                         )
-                    }
-                }
-
-                Text(
-                    text = "Recent instances",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                if (instances.isEmpty()) {
-                    Text(
-                        text = "No instances generated yet.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    instances.take(5).forEach { instance ->
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "#${instance.sharedDebtId} · ${instance.debtName} · " +
-                                "${instance.amount} · " +
-                                instance.createdAt.take(16).replace('T', ' '),
-                            style = MaterialTheme.typography.bodySmall,
+                            text = instance.createdAt.take(10),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -690,27 +804,22 @@ private fun RecurringDebtCard(
 
 @Composable
 private fun StatusChip(status: String) {
+    val splitify = MaterialTheme.splitify
     val containerColor = when (status) {
-        "Active" -> MaterialTheme.colorScheme.primaryContainer
-        "Paused" -> MaterialTheme.colorScheme.secondaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        "Active" -> splitify.positiveContainer
+        "Paused" -> MaterialTheme.colorScheme.surfaceContainerHigh
+        else -> MaterialTheme.colorScheme.secondaryContainer
     }
     val contentColor = when (status) {
-        "Active" -> MaterialTheme.colorScheme.onPrimaryContainer
-        "Paused" -> MaterialTheme.colorScheme.onSecondaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        "Active" -> splitify.onPositiveContainer
+        "Paused" -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSecondaryContainer
     }
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = containerColor,
+    Pill(
+        text = status,
+        containerColor = containerColor,
         contentColor = contentColor,
-    ) {
-        Text(
-            text = status,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            style = MaterialTheme.typography.labelSmall,
-        )
-    }
+    )
 }
 
 @Composable
@@ -743,31 +852,16 @@ private fun InfoBanner(
 
 @Composable
 private fun EmptyRecurringDebts(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(40.dp),
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        EmptyState(
+            icon = Icons.Default.DateRange,
+            title = "No recurring debts yet",
+            message = "Schedule an expense once and Splitify generates it on repeat.",
+            accent = MaterialTheme.colorScheme.tertiary,
+            accentContainer = MaterialTheme.colorScheme.tertiaryContainer,
+            actionLabel = "Add recurring debt",
+            onAction = onCreate,
         )
-        Spacer(Modifier.height(12.dp))
-        Text(text = "No recurring debts yet", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Schedule a debt to be generated automatically on a regular basis.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
-            Text("Add recurring debt")
-        }
     }
 }
 
@@ -811,34 +905,63 @@ private fun RecurringDebtFormDialog(
     val selectedMemberIds = remember {
         mutableStateListOf<Long>().apply { addAll(initialMemberIds) }
     }
+    val eachShare = splitEvenly(amount, selectedMemberIds.size)
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(if (isEditing) "Edit recurring debt" else "New recurring debt") },
         text = {
             Column(
                 modifier = Modifier
                     .heightIn(max = 460.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
+                    label = { Text("What is it for?") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
                     label = { Text("Amount") },
+                    prefix = { Text("€ ") },
                     singleLine = true,
                     enabled = !isSaving,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (eachShare != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Each pays",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = formatMoney(eachShare),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = "Frequency",
                     style = MaterialTheme.typography.labelLarge,
@@ -869,36 +992,45 @@ private fun RecurringDebtFormDialog(
                     } else {
                         null
                     },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = endDate,
                     onValueChange = { endDate = it },
-                    label = { Text("End date (optional, YYYY-MM-DD)") },
+                    label = { Text("End date (optional)") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 if (isEditing) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Active", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                text = "Paused schedules do not generate debts.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = "Active", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    text = "Paused schedules do not generate debts.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Switch(
+                                checked = isActive,
+                                onCheckedChange = { isActive = it },
+                                enabled = !isSaving,
                             )
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Switch(
-                            checked = isActive,
-                            onCheckedChange = { isActive = it },
-                            enabled = !isSaving,
-                        )
                     }
                 }
 
@@ -909,32 +1041,42 @@ private fun RecurringDebtFormDialog(
                 )
                 members.forEach { member ->
                     val checked = selectedMemberIds.contains(member.id)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isSaving) {
+                    Surface(
+                        onClick = {
+                            if (!isSaving) {
                                 if (checked) {
                                     selectedMemberIds.remove(member.id)
                                 } else {
                                     selectedMemberIds.add(member.id)
                                 }
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
+                            }
+                        },
+                        enabled = !isSaving,
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (checked) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerLow
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = { value ->
-                                if (value) {
-                                    if (!selectedMemberIds.contains(member.id)) {
-                                        selectedMemberIds.add(member.id)
-                                    }
-                                } else {
-                                    selectedMemberIds.remove(member.id)
-                                }
-                            },
-                            enabled = !isSaving,
-                        )
-                        Text(text = member.username)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Avatar(name = member.username, seed = member.id, size = 30.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = member.username,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null,
+                                enabled = !isSaving,
+                            )
+                        }
                     }
                 }
 
@@ -986,3 +1128,11 @@ private fun RecurringDebtFormDialog(
 
 private fun frequencyLabel(frequency: String): String =
     Frequencies.firstOrNull { it.first == frequency }?.second ?: frequency
+
+private fun frequencyUnit(frequency: String): String = when (frequency) {
+    "daily" -> "day"
+    "weekly" -> "week"
+    "monthly" -> "month"
+    "yearly" -> "year"
+    else -> frequency
+}

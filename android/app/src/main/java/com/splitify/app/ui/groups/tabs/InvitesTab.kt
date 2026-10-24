@@ -6,6 +6,15 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.splitify.app.ui.components.EmptyState
+import com.splitify.app.ui.components.IconBubble
+import com.splitify.app.ui.components.Pill
+import com.splitify.app.ui.components.SplitifyCard
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,13 +31,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -36,6 +48,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -223,20 +236,30 @@ fun InvitesTab(
             state.isLoading && state.invites.isEmpty() ->
                 LoadingScreen(message = "Loading invites…")
 
-            state.creatorOnly -> CenteredInviteMessage(
-                title = "Creator only",
-                message = "Only the group creator can manage invites.",
-                icon = { Icon(Icons.Default.Lock, contentDescription = null) },
-            )
+            state.creatorOnly -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(
+                    icon = Icons.Default.Lock,
+                    title = "Creator only",
+                    message = "Only the group creator can create and revoke invite links.",
+                )
+            }
 
-            state.invites.isEmpty() -> EmptyInvites(onCreate = { viewModel.openCreate() })
+            state.invites.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(
+                    icon = Icons.Default.Share,
+                    title = "No invite links yet",
+                    message = "Create a link and share it with anyone you want in this group.",
+                    actionLabel = "Create invite",
+                    onAction = { viewModel.openCreate() },
+                )
+            }
 
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 8.dp,
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = 4.dp,
                     bottom = 96.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -259,6 +282,9 @@ fun InvitesTab(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("New invite") },
             )
@@ -279,6 +305,7 @@ fun InvitesTab(
     state.deleteTarget?.let { invite ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissDelete() },
+            shape = RoundedCornerShape(28.dp),
             title = { Text("Revoke invite") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -330,121 +357,111 @@ private fun InviteCard(
     onShare: (String) -> Unit,
     onRevoke: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = invite.name ?: "Untitled invite",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (invite.isReusable) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ) {
-                        Text(
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    SplitifyCard(contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(
+                icon = Icons.Default.Share,
+                size = 44.dp,
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = invite.name ?: "Untitled invite",
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (invite.isReusable) {
+                        Spacer(Modifier.width(8.dp))
+                        Pill(
                             text = "Reusable",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                         )
                     }
                 }
+                Text(
+                    text = "Expires ${invite.expirationDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-
-            Text(
-                text = "Expires ${invite.expirationDate}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Text(
-                text = link,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onCopy(link) }) {
-                    Text("Copy link")
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Invite options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                TextButton(onClick = { onShare(link) }) {
-                    Text("Share")
-                }
-                TextButton(onClick = onRevoke) {
-                    Text("Revoke", color = MaterialTheme.colorScheme.error)
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Revoke invite") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onRevoke()
+                        },
+                    )
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun EmptyInvites(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Lock,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(40.dp),
-        )
         Spacer(Modifier.height(12.dp))
-        Text(text = "No invites yet", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Create an invite link and share it with someone you want to join.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
-            Text("Create invite")
-        }
-    }
-}
 
-@Composable
-private fun CenteredInviteMessage(
-    title: String,
-    message: String,
-    icon: @Composable () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(
-            modifier = Modifier.size(40.dp),
-            contentAlignment = Alignment.Center,
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            icon()
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = link,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        Text(text = title, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            TextButton(onClick = { onCopy(link) }) {
+                Text("Copy link")
+            }
+            TextButton(onClick = { onShare(link) }) {
+                Text("Share")
+            }
+        }
     }
 }
 
@@ -464,47 +481,57 @@ private fun CreateInviteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text("New invite") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name (optional)") },
                     singleLine = true,
                     enabled = !isCreating,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Reusable",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Text(
-                            text = "The link can be used more than once.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Reusable",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                text = "The link can be used more than once.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Switch(
+                            checked = reusable,
+                            onCheckedChange = { reusable = it },
+                            enabled = !isCreating,
                         )
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = reusable,
-                        onCheckedChange = { reusable = it },
-                        enabled = !isCreating,
-                    )
                 }
                 OutlinedTextField(
                     value = durationDays,
                     onValueChange = { durationDays = it },
-                    label = { Text("Duration (1–30 days)") },
+                    label = { Text("Valid for (1–30 days)") },
                     singleLine = true,
                     enabled = !isCreating,
                     isError = durationDays.isNotBlank() && !valid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {

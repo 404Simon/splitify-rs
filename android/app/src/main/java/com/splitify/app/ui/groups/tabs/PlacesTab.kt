@@ -10,6 +10,15 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.splitify.app.ui.components.EmptyState
+import com.splitify.app.ui.components.Pill
+import com.splitify.app.ui.components.SplitifyCard
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,11 +59,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -239,7 +250,7 @@ fun PlacesTab(
                 ErrorBanner(
                     message = message,
                     onDismiss = { viewModel.dismissError() },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -247,15 +258,27 @@ fun PlacesTab(
                     state.isLoading && state.markers.isEmpty() ->
                         LoadingScreen(message = "Loading places…")
 
-                    state.markers.isEmpty() ->
-                        EmptyPlaces(onCreate = { viewModel.openCreate() })
+                    state.markers.isEmpty() -> Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EmptyState(
+                            icon = Icons.Default.Place,
+                            title = "No places yet",
+                            message = "Pin the cafés, bars and spots your group wants to visit.",
+                            accent = MaterialTheme.colorScheme.tertiary,
+                            accentContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                            actionLabel = "Add a place",
+                            onAction = { viewModel.openCreate() },
+                        )
+                    }
 
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 8.dp,
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = 4.dp,
                             bottom = 96.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -282,6 +305,9 @@ fun PlacesTab(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("New place") },
             )
@@ -304,6 +330,7 @@ fun PlacesTab(
     state.deleteTarget?.let { marker ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissDelete() },
+            shape = RoundedCornerShape(28.dp),
             title = { Text("Delete place") },
             text = { Text("Delete \"${marker.name}\"? This cannot be undone.") },
             confirmButton = {
@@ -328,95 +355,116 @@ private fun PlaceCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    SplitifyCard(contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
                     text = marker.emoji.ifBlank { "📍" },
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = marker.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "Added by ${marker.creatorUsername}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (canManage) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit place")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete place",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-
-            marker.address?.takeIf { it.isNotBlank() }?.let { address ->
-                Text(
-                    text = address,
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 24.sp,
                 )
             }
-            marker.description?.takeIf { it.isNotBlank() }?.let { description ->
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = description,
+                    text = marker.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Added by ${marker.creatorUsername}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = "${marker.latitude}, ${marker.longitude}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(onClick = onOpenInMaps, modifier = Modifier.align(Alignment.End)) {
-                Text("Open in Maps")
+            if (canManage) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Place options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
             }
         }
-    }
-}
 
-@Composable
-private fun EmptyPlaces(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Place,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(text = "No places yet", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Add a spot your group wants to visit.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
-            Text("Add place")
+        marker.address?.takeIf { it.isNotBlank() }?.let { address ->
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Place,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = address,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        marker.description?.takeIf { it.isNotBlank() }?.let { description ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Pill(
+                text = coordinateLabel(marker.latitude, marker.longitude),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = onOpenInMaps,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text("Open in Maps")
+            }
         }
     }
 }
@@ -447,36 +495,43 @@ private fun PlaceFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(if (editingMarker == null) "New place" else "Edit place") },
         text = {
             Column(
                 modifier = Modifier
                     .heightIn(max = 460.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.tertiaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = emoji.ifBlank { "📍" }, fontSize = 26.sp)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedTextField(
+                        value = emoji,
+                        onValueChange = { emoji = it },
+                        label = { Text("Emoji") },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     singleLine = true,
                     enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = emoji,
-                    onValueChange = { emoji = it },
-                    label = { Text("Emoji") },
-                    singleLine = true,
-                    enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description (optional)") },
-                    enabled = !isSaving,
-                    minLines = 2,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -485,28 +540,42 @@ private fun PlaceFormDialog(
                     label = { Text("Address (optional)") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = latitude,
-                    onValueChange = { latitude = it },
-                    label = { Text("Latitude (-90 to 90)") },
-                    singleLine = true,
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Note (optional)") },
                     enabled = !isSaving,
-                    isError = latitude.isNotBlank() && !latitudeValid,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    minLines = 2,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
-                    value = longitude,
-                    onValueChange = { longitude = it },
-                    label = { Text("Longitude (-180 to 180)") },
-                    singleLine = true,
-                    enabled = !isSaving,
-                    isError = longitude.isNotBlank() && !longitudeValid,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = latitude,
+                        onValueChange = { latitude = it },
+                        label = { Text("Latitude") },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        isError = latitude.isNotBlank() && !latitudeValid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = longitude,
+                        onValueChange = { longitude = it },
+                        label = { Text("Longitude") },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        isError = longitude.isNotBlank() && !longitudeValid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 error?.let {
                     Text(
                         text = it,
@@ -544,6 +613,9 @@ private fun PlaceFormDialog(
     )
 }
 
+private fun coordinateLabel(latitude: Double, longitude: Double): String =
+    String.format(java.util.Locale.getDefault(), "%.4f, %.4f", latitude, longitude)
+
 private fun parseLatitude(value: String): Double? =
     value.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it in -90.0..90.0 }
 
@@ -561,7 +633,7 @@ private fun openInMaps(context: Context, marker: MapMarkerDto) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, fallback))
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "No maps app available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
         }
     }
 }

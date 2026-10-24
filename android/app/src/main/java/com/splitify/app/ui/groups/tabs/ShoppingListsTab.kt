@@ -1,6 +1,19 @@
 package com.splitify.app.ui.groups.tabs
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.draw.clip
+import com.splitify.app.ui.components.EmptyState
+import com.splitify.app.ui.components.IconBubble
+import com.splitify.app.ui.components.Pill
+import com.splitify.app.ui.components.SectionHeader
+import com.splitify.app.ui.components.SplitifyCard
+import com.splitify.app.ui.theme.splitify
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -420,6 +434,7 @@ fun ShoppingListsTab(
     state.deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissDelete() },
+            shape = RoundedCornerShape(28.dp),
             title = { Text("Delete shopping list") },
             text = { Text("Delete \"${target.name}\"? All of its items will be removed.") },
             confirmButton = {
@@ -449,6 +464,7 @@ fun ShoppingListsTab(
     state.deleteItemTarget?.let { item ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissDeleteItem() },
+            shape = RoundedCornerShape(28.dp),
             title = { Text("Delete item") },
             text = { Text("Delete \"${item.name}\" from this list?") },
             confirmButton = {
@@ -476,24 +492,30 @@ private fun ShoppingListsOverview(
             state.isLoading && state.lists.isEmpty() ->
                 LoadingScreen(message = "Loading shopping lists…")
 
-            state.lists.isEmpty() -> EmptyShoppingLists(
-                onCreate = { viewModel.openCreate() },
-            )
+            state.lists.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(
+                    icon = Icons.Default.ShoppingCart,
+                    title = "No shopping lists yet",
+                    message = "Plan groceries or supplies together and tick items off as you go.",
+                    actionLabel = "Create a list",
+                    onAction = { viewModel.openCreate() },
+                )
+            }
 
             else -> Column(modifier = Modifier.fillMaxSize()) {
                 state.error?.let { message ->
                     ErrorBanner(
                         message = message,
                         onDismiss = { viewModel.dismissError() },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 4.dp,
                         bottom = 96.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -517,6 +539,9 @@ private fun ShoppingListsOverview(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("New list") },
             )
@@ -532,54 +557,79 @@ private fun ShoppingListCard(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen),
-    ) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = list.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "Created by ${list.creatorUsername}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    var menuExpanded by remember { mutableStateOf(false) }
+    val progress = if (list.totalItems > 0) {
+        list.completedItems.toFloat() / list.totalItems.toFloat()
+    } else {
+        0f
+    }
+
+    SplitifyCard(onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(
+                icon = Icons.Default.ShoppingCart,
+                size = 44.dp,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = list.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Added by ${list.creatorUsername}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "List options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onRename) {
-                    Icon(Icons.Default.Edit, contentDescription = "Rename list")
-                }
-                if (canDelete) {
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete list",
-                            tint = MaterialTheme.colorScheme.error,
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onRename()
+                        },
+                    )
+                    if (canDelete) {
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
                         )
                     }
                 }
             }
+        }
 
-            val progress = if (list.totalItems > 0) {
-                list.completedItems.toFloat() / list.totalItems.toFloat()
-            } else {
-                0f
-            }
-            if (list.totalItems > 0) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        Spacer(Modifier.height(12.dp))
+        ProgressBar(progress = progress)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = if (list.totalItems > 0) {
                     "${list.completedItems} of ${list.totalItems} items done"
@@ -588,9 +638,31 @@ private fun ShoppingListCard(
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
             )
+            if (list.totalItems > 0) {
+                Pill(
+                    text = "${(progress * 100).toInt()}%",
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun ProgressBar(progress: Float) {
+    LinearProgressIndicator(
+        progress = { progress },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(7.dp)
+            .clip(CircleShape),
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+    )
 }
 
 @Composable
@@ -602,49 +674,49 @@ private fun ShoppingListDetail(
     val list = state.selectedList
     val canDelete = list != null && currentUserId != null && list.createdBy == currentUserId
     val summary = list?.let { summaryOf(it, state) }
+    val done = state.items.count { it.isCompleted }
+    val total = state.items.size
+    val progress = if (total > 0) done.toFloat() / total.toFloat() else 0f
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { viewModel.closeDetail() }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to shopping lists",
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = list?.name ?: "Shopping list",
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val done = state.items.count { it.isCompleted }
-                    Text(
-                        text = "$done of ${state.items.size} items done",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (summary != null) {
-                    IconButton(onClick = { viewModel.requestRename(summary) }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Rename list")
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(modifier = Modifier.padding(start = 4.dp, end = 8.dp, bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { viewModel.closeDetail() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to shopping lists",
+                        )
                     }
-                    if (canDelete) {
-                        IconButton(onClick = { viewModel.requestDelete(summary) }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete list",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = list?.name ?: "Shopping list",
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "$done of $total items done",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (summary != null) {
+                        IconButton(onClick = { viewModel.requestRename(summary) }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Rename list")
+                        }
+                        if (canDelete) {
+                            IconButton(onClick = { viewModel.requestDelete(summary) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete list",
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                     }
                 }
+                ProgressBar(progress = progress)
             }
         }
 
@@ -652,7 +724,7 @@ private fun ShoppingListDetail(
             ErrorBanner(
                 message = message,
                 onDismiss = { viewModel.dismissDetailError() },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
 
@@ -667,12 +739,12 @@ private fun ShoppingListDetail(
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 12.dp,
                         bottom = 96.dp,
                     ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (state.items.isEmpty()) {
                         item(key = "empty-items") {
@@ -696,10 +768,9 @@ private fun ShoppingListDetail(
 
                     if (state.activity.isNotEmpty()) {
                         item(key = "activity-title") {
-                            Text(
-                                text = "Recent activity",
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.padding(top = 12.dp),
+                            SectionHeader(
+                                title = "Recent activity",
+                                modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
                             )
                         }
                         items(state.activity, key = { "activity-${it.id}" }) { entry ->
@@ -715,6 +786,9 @@ private fun ShoppingListDetail(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text("Add item") },
                 )
@@ -730,7 +804,22 @@ private fun ShoppingItemRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (item.isCompleted) {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        } else {
+            MaterialTheme.splitify.card
+        },
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.splitify.cardBorder,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Row(
             modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -752,19 +841,31 @@ private fun ShoppingItemRow(
                     } else {
                         TextDecoration.None
                     },
+                    color = if (item.isCompleted) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val meta = listOfNotNull(
                     item.quantity?.takeIf { it.isNotBlank() },
                     item.category?.takeIf { it.isNotBlank() },
-                ).joinToString(" · ")
+                )
                 if (meta.isNotEmpty()) {
-                    Text(
-                        text = meta,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        meta.forEach { value ->
+                            Pill(
+                                text = value,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 if (item.isCompleted) {
                     item.completedByUsername?.let { username ->
@@ -772,19 +873,46 @@ private fun ShoppingItemRow(
                             text = "Completed by $username",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
                 }
             }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit item")
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete item",
-                    tint = MaterialTheme.colorScheme.error,
-                )
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Item options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        },
+                    )
+                }
             }
         }
     }
@@ -793,9 +921,18 @@ private fun ShoppingItemRow(
 @Composable
 private fun ActivityRow(entry: ShoppingListActivityDto) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+        )
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = activityDescription(entry),
@@ -811,52 +948,18 @@ private fun ActivityRow(entry: ShoppingListActivityDto) {
 }
 
 @Composable
-private fun EmptyShoppingLists(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.ShoppingCart,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(text = "No shopping lists yet", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Create a shared list for groceries, supplies, or anything else.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
-            Text("Create list")
-        }
-    }
-}
-
-@Composable
 private fun MissingShoppingList(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = "This shopping list is no longer available.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) {
-            Text("Back to lists")
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "This shopping list is no longer available.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Back to lists")
+            }
         }
     }
 }
@@ -875,6 +978,7 @@ private fun NameDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -884,6 +988,7 @@ private fun NameDialog(
                     label = { Text(label) },
                     singleLine = true,
                     isError = error != null,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {
@@ -924,19 +1029,21 @@ private fun ShoppingItemDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(if (editingItem == null) "Add item" else "Edit item") },
         text = {
             Column(
                 modifier = Modifier
                     .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -945,6 +1052,7 @@ private fun ShoppingItemDialog(
                     label = { Text("Quantity (optional)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -952,6 +1060,7 @@ private fun ShoppingItemDialog(
                     onValueChange = { category = it },
                     label = { Text("Category (optional)") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {

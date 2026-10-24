@@ -14,6 +14,12 @@ val debugApiBaseUrl: String = "http://10.0.2.2:3000/api/v1/"
 // and ApiClient refuses to start with a non-HTTPS URL outside debug builds.
 val configuredApiBaseUrl: String? = providers.gradleProperty("apiBaseUrl").orNull
 
+// Personal-device builds: sign the minified release APK with the local debug
+// key so it can update an already-installed debug build without uninstalling.
+// Never enable this for a build you intend to distribute.
+val useDebugSigning: Boolean =
+    providers.gradleProperty("useDebugSigning").orNull?.toBoolean() == true
+
 android {
     namespace = "com.splitify.app"
     compileSdk {
@@ -43,6 +49,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (useDebugSigning) {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 

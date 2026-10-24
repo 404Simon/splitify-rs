@@ -15,26 +15,29 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,7 +50,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -61,8 +63,14 @@ import com.splitify.app.data.dto.GroupMemberDto
 import com.splitify.app.data.dto.TransactionDto
 import com.splitify.app.data.network.userMessage
 import com.splitify.app.data.transactions.TransactionRepository
+import com.splitify.app.ui.components.Avatar
+import com.splitify.app.ui.components.EmptyState
 import com.splitify.app.ui.components.ErrorBanner
 import com.splitify.app.ui.components.LoadingScreen
+import com.splitify.app.ui.components.MoneyText
+import com.splitify.app.ui.components.SplitifyCard
+import com.splitify.app.ui.format.relativeDate
+import com.splitify.app.ui.theme.splitify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -230,25 +238,35 @@ fun TransactionsTab(
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             state.isLoading && state.transactions.isEmpty() ->
-                LoadingScreen(message = "Loading transactions…")
+                LoadingScreen(message = "Loading payments…")
 
-            state.transactions.isEmpty() ->
-                EmptyTransactions(onCreate = { viewModel.openCreate() })
+            state.transactions.isEmpty() -> Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                EmptyState(
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    title = "No payments yet",
+                    message = "Record a payment between members whenever someone settles up.",
+                    actionLabel = "Add a payment",
+                    onAction = { viewModel.openCreate() },
+                )
+            }
 
             else -> Column(modifier = Modifier.fillMaxSize()) {
                 state.actionError?.let { message ->
                     ErrorBanner(
                         message = message,
                         onDismiss = { viewModel.dismissActionError() },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 4.dp,
                         bottom = 96.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -256,6 +274,7 @@ fun TransactionsTab(
                     items(state.transactions, key = { it.id }) { transaction ->
                         TransactionCard(
                             transaction = transaction,
+                            currentUserId = currentUserId,
                             canManage = currentUserId != null &&
                                 transaction.payerId == currentUserId,
                             onEdit = { viewModel.openEdit(transaction) },
@@ -272,8 +291,11 @@ fun TransactionsTab(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New transaction") },
+                text = { Text("New payment") },
             )
         }
     }
@@ -300,7 +322,8 @@ fun TransactionsTab(
     state.deleteTarget?.let { transaction ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissDelete() },
-            title = { Text("Delete transaction") },
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Delete payment") },
             text = {
                 Text(
                     "Delete ${transaction.payerUsername} → " +
@@ -324,88 +347,123 @@ fun TransactionsTab(
 @Composable
 private fun TransactionCard(
     transaction: TransactionDto,
+    currentUserId: Long?,
     canManage: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "${transaction.payerUsername} → " +
-                            transaction.recipientUsername,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    val title = when {
+        transaction.payerId == currentUserId -> "You paid ${transaction.recipientUsername}"
+        transaction.recipientId == currentUserId -> "${transaction.payerUsername} paid you"
+        else -> "${transaction.payerUsername} paid ${transaction.recipientUsername}"
+    }
+
+    SplitifyCard(contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(
+                        name = transaction.payerUsername,
+                        seed = transaction.payerId,
+                        size = 38.dp,
                     )
-                    Text(
-                        text = transaction.createdAt.take(10),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(15.dp),
+                    )
+                    Avatar(
+                        name = transaction.recipientUsername,
+                        seed = transaction.recipientId,
+                        size = 38.dp,
                     )
                 }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = transaction.amount,
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (canManage) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit transaction")
-                    }
-                    IconButton(onClick = onDelete) {
+                Text(
+                    text = relativeDate(transaction.createdAt) ?: transaction.createdAt.take(10),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            MoneyText(
+                amount = transaction.amount,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (canManage) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
                         Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete transaction",
-                            tint = MaterialTheme.colorScheme.error,
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Payment options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
                         )
                     }
                 }
             }
+        }
 
-            transaction.description
-                ?.takeIf { it.isNotBlank() }
-                ?.let { description ->
+        transaction.description
+            ?.takeIf { it.isNotBlank() }
+            ?.let { description ->
+                Spacer(Modifier.size(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         text = description,
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-        }
-    }
-}
-
-@Composable
-private fun EmptyTransactions(onCreate: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Info,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(text = "No transactions yet", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Record a payment between group members to settle up.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Button(onClick = onCreate, modifier = Modifier.padding(top = 16.dp)) {
-            Text("Add transaction")
-        }
+            }
     }
 }
 
@@ -433,13 +491,14 @@ private fun TransactionFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEditing) "Edit transaction" else "New transaction") },
+        shape = RoundedCornerShape(28.dp),
+        title = { Text(if (isEditing) "Edit payment" else "New payment") },
         text = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = 420.dp)
+                    .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ExposedDropdownMenuBox(
                     expanded = recipientExpanded,
@@ -449,8 +508,9 @@ private fun TransactionFormDialog(
                         value = recipientName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Recipient") },
+                        label = { Text("Paid to") },
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(14.dp),
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(
                                 expanded = recipientExpanded,
@@ -467,6 +527,13 @@ private fun TransactionFormDialog(
                         recipients.forEach { member ->
                             DropdownMenuItem(
                                 text = { Text(member.username) },
+                                leadingIcon = {
+                                    Avatar(
+                                        name = member.username,
+                                        seed = member.id,
+                                        size = 28.dp,
+                                    )
+                                },
                                 onClick = {
                                     recipientId = member.id
                                     recipientName = member.username
@@ -487,16 +554,19 @@ private fun TransactionFormDialog(
                     value = amount,
                     onValueChange = { amount = it },
                     label = { Text("Amount") },
+                    prefix = { Text("€ ") },
                     singleLine = true,
                     enabled = !isSaving,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description (optional)") },
+                    label = { Text("Note (optional)") },
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let {
