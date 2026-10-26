@@ -20,7 +20,12 @@ pub fn generate_token() -> String {
 /// Hash a token with SHA-256 and return lowercase hex.
 pub fn hash_token(token: &str) -> String {
     let digest = Sha256::digest(token.as_bytes());
-    format!("{digest:x}")
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest.as_slice() {
+        use std::fmt::Write as _;
+        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    hex
 }
 
 /// Create and persist a new token, returning the plaintext token once.
