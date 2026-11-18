@@ -54,12 +54,8 @@ pub fn should_generate(recurring_debt: &RecurringDebt, today: Date) -> bool {
         return false;
     }
 
-    // Not yet time to generate
-    if today < recurring_debt.next_generation_date {
-        return false;
-    }
-
-    true
+    // Generate once the next generation date has been reached
+    today >= recurring_debt.next_generation_date
 }
 
 #[cfg(test)]
