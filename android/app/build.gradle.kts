@@ -46,8 +46,11 @@ val useDebugSigning: Boolean =
 
 android {
     namespace = "com.splitify.app"
+    // Compose 1.13 (BOM 2026.11.01) requires API 37.1.
     compileSdk {
-        version = release(37)
+        version = release(37) {
+            minorApiLevel = 1
+        }
     }
 
     defaultConfig {
